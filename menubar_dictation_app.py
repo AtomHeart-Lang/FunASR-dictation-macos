@@ -22,7 +22,7 @@ from AppKit import NSApplication, NSApplicationActivationPolicyAccessory, NSImag
 from Foundation import NSBundle
 from funasr import AutoModel
 from funasr.utils.postprocess_utils import rich_transcription_postprocess
-from pynput import keyboard
+from pynput import keyboard, mouse
 
 try:
     import tomllib
@@ -568,17 +568,24 @@ def capture_mouse_button(timeout_s: float = 8.0):
     logging.info("capture_mouse_button: start")
     result = {"value": None, "err": None}
     done = threading.Event()
+    started = threading.Event()
 
     def loop():
         event_mask = (
             (1 << Quartz.kCGEventLeftMouseDown)
+            | (1 << Quartz.kCGEventLeftMouseUp)
             | (1 << Quartz.kCGEventRightMouseDown)
+            | (1 << Quartz.kCGEventRightMouseUp)
             | (1 << Quartz.kCGEventOtherMouseDown)
+            | (1 << Quartz.kCGEventOtherMouseUp)
         )
         runloop_ref = {"loop": None}
 
         def handler(proxy, event_type, event, refcon):
-            if event_type == Quartz.kCGEventTapDisabledByTimeout and tap_ref["tap"] is not None:
+            if event_type in (
+                Quartz.kCGEventTapDisabledByTimeout,
+                getattr(Quartz, "kCGEventTapDisabledByUserInput", -1),
+            ) and tap_ref["tap"] is not None:
                 Quartz.CGEventTapEnable(tap_ref["tap"], True)
                 return event
             button_no = int(
@@ -586,6 +593,13 @@ def capture_mouse_button(timeout_s: float = 8.0):
             )
             mapped = button_number_to_name(button_no)
             normalized = normalize_mouse_button(mapped)
+            logging.info(
+                "capture_mouse_button: event_type=%s button_no=%s mapped=%s normalized=%s",
+                event_type,
+                button_no,
+                mapped,
+                normalized,
+            )
             if normalized is None:
                 return event
             result["value"] = normalized
@@ -606,12 +620,14 @@ def capture_mouse_button(timeout_s: float = 8.0):
         if tap_ref["tap"] is None:
             result["err"] = "Mouse event tap creation failed. Check Accessibility + Input Monitoring."
             done.set()
+            started.set()
             return
 
         source = Quartz.CFMachPortCreateRunLoopSource(None, tap_ref["tap"], 0)
         runloop_ref["loop"] = Quartz.CFRunLoopGetCurrent()
         Quartz.CFRunLoopAddSource(runloop_ref["loop"], source, Quartz.kCFRunLoopCommonModes)
         Quartz.CGEventTapEnable(tap_ref["tap"], True)
+        started.set()
 
         start = time.time()
         while not done.is_set() and (time.time() - start) < timeout_s:
@@ -622,6 +638,7 @@ def capture_mouse_button(timeout_s: float = 8.0):
 
     t = threading.Thread(target=loop, daemon=True)
     t.start()
+    started.wait(timeout=1.0)
     done.wait(timeout=timeout_s + 0.5)
     if result["value"]:
         logging.info("capture_mouse_button: captured=%s", result["value"])
@@ -632,6 +649,51 @@ def capture_mouse_button(timeout_s: float = 8.0):
     return result["value"], result["err"]
 
 
+def capture_mouse_button_pynput(timeout_s: float = 6.0):
+    logging.info("capture_mouse_button_pynput: start")
+    result = {"value": None, "err": None}
+    done = threading.Event()
+    listener_ref = {"listener": None}
+
+    def on_click(x, y, button, pressed):
+        if not pressed:
+            return True
+        name = getattr(button, "name", str(button))
+        token = str(name).lower().replace("button.", "")
+        normalized = normalize_mouse_button(token)
+        logging.info(
+            "capture_mouse_button_pynput: token=%s normalized=%s",
+            token,
+            normalized,
+        )
+        if normalized is None:
+            return True
+        result["value"] = normalized
+        done.set()
+        return False
+
+    try:
+        listener_ref["listener"] = mouse.Listener(on_click=on_click, suppress=False)
+        listener_ref["listener"].start()
+        done.wait(timeout=timeout_s)
+    except Exception as exc:
+        result["err"] = f"pynput mouse capture crashed: {exc}"
+    finally:
+        try:
+            if listener_ref["listener"] is not None:
+                listener_ref["listener"].stop()
+                listener_ref["listener"].join(timeout=0.5)
+        except Exception:
+            pass
+    if result["value"]:
+        logging.info("capture_mouse_button_pynput: captured=%s", result["value"])
+    elif result["err"]:
+        logging.warning("capture_mouse_button_pynput: error=%s", result["err"])
+    else:
+        logging.info("capture_mouse_button_pynput: timeout")
+    return result["value"], result["err"]
+
+
 def choose_mouse_button_with_capture(current_value: str) -> Optional[str]:
     ui_alert(
         "请在 8 秒内点击要设置的鼠标按键。\n"
@@ -639,6 +701,13 @@ def choose_mouse_button_with_capture(current_value: str) -> Optional[str]:
         "若未识别到，将进入手动输入。"
     )
     captured, err = capture_mouse_button(timeout_s=8.0)
+    if not captured:
+        fallback_captured, fallback_err = capture_mouse_button_pynput(timeout_s=6.0)
+        if fallback_captured:
+            captured = fallback_captured
+            err = None
+        elif err is None:
+            err = fallback_err
     if captured:
         edited = ui_prompt_text(
             message=f"已识别到鼠标按键: {captured}\n可直接保存或手动修改。",
