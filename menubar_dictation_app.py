@@ -19,7 +19,19 @@ import pyperclip
 import Quartz
 import rumps
 import sounddevice as sd
-from AppKit import NSApplication, NSApplicationActivationPolicyAccessory, NSImage
+from AppKit import (
+    NSAlert,
+    NSAlertFirstButtonReturn,
+    NSApplication,
+    NSApplicationActivationPolicyAccessory,
+    NSButton,
+    NSControlStateValueOn,
+    NSImage,
+    NSMakeRect,
+    NSSwitchButton,
+    NSTextField,
+    NSView,
+)
 from Foundation import NSBundle
 from funasr import AutoModel
 from funasr.utils.postprocess_utils import rich_transcription_postprocess
@@ -214,170 +226,120 @@ def save_core_config(config: CoreConfig) -> None:
 
 
 def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
-    script = r"""
-import json
-import os
-import sys
-import tkinter as tk
-from tkinter import messagebox, ttk
+    def parse_int(raw: str, name: str, min_value: int, max_value: int) -> int:
+        try:
+            value = int(raw.strip())
+        except Exception as exc:
+            raise ValueError(f"{name} must be an integer") from exc
+        if value < min_value or value > max_value:
+            raise ValueError(f"{name} must be in [{min_value}, {max_value}]")
+        return value
 
-data = json.loads(sys.stdin.read() or "{}")
-state = {"result": None}
+    state = {
+        "language": current.language,
+        "sample_rate": str(current.sample_rate),
+        "channels": str(current.channels),
+        "paste_delay_ms": str(current.paste_delay_ms),
+        "batch_size_s": str(current.batch_size_s),
+        "enable_beep": bool(current.enable_beep),
+        "use_itn": bool(current.use_itn),
+        "merge_vad": bool(current.merge_vad),
+        "remove_emoji": bool(current.remove_emoji),
+    }
 
-root = tk.Tk()
-root.title("Model Config")
-root.resizable(False, False)
-root.geometry("+520+220")
+    while True:
+        app = NSApplication.sharedApplication()
+        app.activateIgnoringOtherApps_(True)
 
-icon_path = os.environ.get("SV_ICON_PATH", "")
-if icon_path and os.path.exists(icon_path):
-    try:
-        icon = tk.PhotoImage(file=icon_path)
-        root.iconphoto(True, icon)
-        root._icon_ref = icon
-    except Exception:
-        pass
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_("Model Config")
+        alert.setInformativeText_("Edit all config.toml runtime settings")
+        alert.addButtonWithTitle_("Save")
+        alert.addButtonWithTitle_("Cancel")
 
-main = ttk.Frame(root, padding=12)
-main.grid(row=0, column=0, sticky="nsew")
+        panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 430, 310))
 
-labels = {
-    "language": "language",
-    "sample_rate": "sample_rate",
-    "channels": "channels",
-    "paste_delay_ms": "paste_delay_ms",
-    "batch_size_s": "batch_size_s",
-}
+        def make_label(y: float, text: str):
+            label = NSTextField.alloc().initWithFrame_(NSMakeRect(10, y, 130, 22))
+            label.setEditable_(False)
+            label.setBezeled_(False)
+            label.setDrawsBackground_(False)
+            label.setSelectable_(False)
+            label.setStringValue_(text)
+            panel.addSubview_(label)
+            return label
 
-language_var = tk.StringVar(value=str(data.get("language", "auto")))
-sample_rate_var = tk.StringVar(value=str(data.get("sample_rate", 16000)))
-channels_var = tk.StringVar(value=str(data.get("channels", 1)))
-paste_delay_var = tk.StringVar(value=str(data.get("paste_delay_ms", 40)))
-batch_size_var = tk.StringVar(value=str(data.get("batch_size_s", 10)))
+        def make_input(y: float, value: str):
+            field = NSTextField.alloc().initWithFrame_(NSMakeRect(150, y, 260, 24))
+            field.setStringValue_(value)
+            panel.addSubview_(field)
+            return field
 
-enable_beep_var = tk.BooleanVar(value=bool(data.get("enable_beep", True)))
-use_itn_var = tk.BooleanVar(value=bool(data.get("use_itn", False)))
-merge_vad_var = tk.BooleanVar(value=bool(data.get("merge_vad", False)))
-remove_emoji_var = tk.BooleanVar(value=bool(data.get("remove_emoji", True)))
+        def make_check(y: float, text: str, value: bool):
+            box = NSButton.alloc().initWithFrame_(NSMakeRect(10, y, 300, 22))
+            box.setButtonType_(NSSwitchButton)
+            box.setTitle_(text)
+            box.setState_(NSControlStateValueOn if value else 0)
+            panel.addSubview_(box)
+            return box
 
-row = 0
-ttk.Label(main, text="All config.toml runtime settings", font=("", 12, "bold")).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 8))
-row += 1
+        make_label(270, "language")
+        language_field = make_input(268, state["language"])
+        make_label(238, "sample_rate")
+        sample_rate_field = make_input(236, state["sample_rate"])
+        make_label(206, "channels")
+        channels_field = make_input(204, state["channels"])
+        make_label(174, "paste_delay_ms")
+        paste_delay_field = make_input(172, state["paste_delay_ms"])
+        make_label(142, "batch_size_s")
+        batch_size_field = make_input(140, state["batch_size_s"])
 
-ttk.Label(main, text=labels["language"]).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=3)
-language_entry = ttk.Combobox(main, textvariable=language_var, width=24)
-language_entry["values"] = ("auto", "zh", "en", "yue", "ja", "ko", "nospeech")
-language_entry.grid(row=row, column=1, sticky="ew", pady=3)
-row += 1
+        enable_beep_box = make_check(108, "enable_beep", state["enable_beep"])
+        use_itn_box = make_check(84, "use_itn", state["use_itn"])
+        merge_vad_box = make_check(60, "merge_vad", state["merge_vad"])
+        remove_emoji_box = make_check(36, "remove_emoji", state["remove_emoji"])
 
-ttk.Label(main, text=labels["sample_rate"]).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=3)
-ttk.Entry(main, textvariable=sample_rate_var, width=26).grid(row=row, column=1, sticky="ew", pady=3)
-row += 1
+        hint = NSTextField.alloc().initWithFrame_(NSMakeRect(10, 8, 410, 22))
+        hint.setEditable_(False)
+        hint.setBezeled_(False)
+        hint.setDrawsBackground_(False)
+        hint.setSelectable_(False)
+        hint.setStringValue_("Tips: batch_size_s 6~12; merge_vad=false for better punctuation stability.")
+        panel.addSubview_(hint)
 
-ttk.Label(main, text=labels["channels"]).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=3)
-ttk.Entry(main, textvariable=channels_var, width=26).grid(row=row, column=1, sticky="ew", pady=3)
-row += 1
+        alert.setAccessoryView_(panel)
+        resp = alert.runModal()
+        if resp != NSAlertFirstButtonReturn:
+            logging.info("ui_edit_model_config: canceled")
+            return None
 
-ttk.Label(main, text=labels["paste_delay_ms"]).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=3)
-ttk.Entry(main, textvariable=paste_delay_var, width=26).grid(row=row, column=1, sticky="ew", pady=3)
-row += 1
+        state["language"] = language_field.stringValue().strip().lower()
+        state["sample_rate"] = sample_rate_field.stringValue().strip()
+        state["channels"] = channels_field.stringValue().strip()
+        state["paste_delay_ms"] = paste_delay_field.stringValue().strip()
+        state["batch_size_s"] = batch_size_field.stringValue().strip()
+        state["enable_beep"] = bool(enable_beep_box.state() == NSControlStateValueOn)
+        state["use_itn"] = bool(use_itn_box.state() == NSControlStateValueOn)
+        state["merge_vad"] = bool(merge_vad_box.state() == NSControlStateValueOn)
+        state["remove_emoji"] = bool(remove_emoji_box.state() == NSControlStateValueOn)
 
-ttk.Label(main, text=labels["batch_size_s"]).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=3)
-ttk.Entry(main, textvariable=batch_size_var, width=26).grid(row=row, column=1, sticky="ew", pady=3)
-row += 1
-
-ttk.Checkbutton(main, text="enable_beep", variable=enable_beep_var).grid(row=row, column=0, columnspan=2, sticky="w", pady=(6, 2))
-row += 1
-ttk.Checkbutton(main, text="use_itn", variable=use_itn_var).grid(row=row, column=0, columnspan=2, sticky="w", pady=2)
-row += 1
-ttk.Checkbutton(main, text="merge_vad", variable=merge_vad_var).grid(row=row, column=0, columnspan=2, sticky="w", pady=2)
-row += 1
-ttk.Checkbutton(main, text="remove_emoji", variable=remove_emoji_var).grid(row=row, column=0, columnspan=2, sticky="w", pady=(2, 8))
-row += 1
-
-ttk.Label(main, text="Tips: batch_size_s 6~12; merge_vad=false for better punctuation stability.", foreground="#666666").grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 8))
-row += 1
-
-def to_int(raw, name, min_value, max_value):
-    try:
-        value = int(raw)
-    except Exception:
-        raise ValueError(f"{name} must be an integer")
-    if value < min_value or value > max_value:
-        raise ValueError(f"{name} must be in [{min_value}, {max_value}]")
-    return value
-
-def on_save():
-    try:
-        language = language_var.get().strip().lower()
-        if not language:
-            raise ValueError("language cannot be empty")
-        sample_rate = to_int(sample_rate_var.get(), "sample_rate", 8000, 48000)
-        channels = to_int(channels_var.get(), "channels", 1, 2)
-        paste_delay_ms = to_int(paste_delay_var.get(), "paste_delay_ms", 0, 1000)
-        batch_size_s = to_int(batch_size_var.get(), "batch_size_s", 1, 60)
-        state["result"] = {
-            "language": language,
-            "sample_rate": sample_rate,
-            "channels": channels,
-            "paste_delay_ms": paste_delay_ms,
-            "enable_beep": bool(enable_beep_var.get()),
-            "use_itn": bool(use_itn_var.get()),
-            "batch_size_s": batch_size_s,
-            "merge_vad": bool(merge_vad_var.get()),
-            "remove_emoji": bool(remove_emoji_var.get()),
-        }
-        root.quit()
-    except Exception as exc:
-        messagebox.showerror("Invalid Config", str(exc))
-
-def on_cancel():
-    root.quit()
-
-btns = ttk.Frame(main)
-btns.grid(row=row, column=0, columnspan=2, sticky="e")
-ttk.Button(btns, text="Cancel", command=on_cancel).grid(row=0, column=0, padx=(0, 8))
-ttk.Button(btns, text="Save", command=on_save).grid(row=0, column=1)
-
-root.columnconfigure(0, weight=1)
-main.columnconfigure(1, weight=1)
-root.mainloop()
-root.destroy()
-
-if state["result"] is None:
-    sys.exit(1)
-print(json.dumps(state["result"], ensure_ascii=False))
-"""
-    proc = subprocess.run(
-        [sys.executable, "-c", script],
-        input=json.dumps(asdict(current), ensure_ascii=False),
-        text=True,
-        capture_output=True,
-        cwd=str(APP_DIR),
-        env={**os.environ, "SV_ICON_PATH": APP_ICON},
-        check=False,
-    )
-    if proc.returncode != 0:
-        if proc.stderr.strip():
-            logging.warning("ui_edit_model_config canceled/error: %s", proc.stderr.strip())
-        return None
-    try:
-        data = json.loads(proc.stdout.strip())
-        return CoreConfig(
-            language=str(data.get("language", current.language)),
-            sample_rate=int(data.get("sample_rate", current.sample_rate)),
-            channels=int(data.get("channels", current.channels)),
-            paste_delay_ms=int(data.get("paste_delay_ms", current.paste_delay_ms)),
-            enable_beep=bool(data.get("enable_beep", current.enable_beep)),
-            use_itn=bool(data.get("use_itn", current.use_itn)),
-            batch_size_s=int(data.get("batch_size_s", current.batch_size_s)),
-            merge_vad=bool(data.get("merge_vad", current.merge_vad)),
-            remove_emoji=bool(data.get("remove_emoji", current.remove_emoji)),
-        )
-    except Exception as exc:
-        logging.warning("ui_edit_model_config parse failed: %s", exc)
-        ui_alert("Model Config 保存失败：返回数据格式无效。")
-        return None
+        try:
+            if not state["language"]:
+                raise ValueError("language cannot be empty")
+            return CoreConfig(
+                language=state["language"],
+                sample_rate=parse_int(state["sample_rate"], "sample_rate", 8000, 48000),
+                channels=parse_int(state["channels"], "channels", 1, 2),
+                paste_delay_ms=parse_int(state["paste_delay_ms"], "paste_delay_ms", 0, 1000),
+                enable_beep=state["enable_beep"],
+                use_itn=state["use_itn"],
+                batch_size_s=parse_int(state["batch_size_s"], "batch_size_s", 1, 60),
+                merge_vad=state["merge_vad"],
+                remove_emoji=state["remove_emoji"],
+            )
+        except Exception as exc:
+            logging.warning("ui_edit_model_config invalid: %s", exc)
+            ui_alert(str(exc), title="Invalid Model Config")
 
 
 def load_ui_settings() -> UISettings:
@@ -1742,9 +1704,11 @@ class SenseVoiceMenuBarApp(rumps.App):
     @rumps.clicked("Model Config")
     def on_model_config(self, _):
         try:
+            started = time.monotonic()
             logging.info("on_model_config: open")
             edited = ui_edit_model_config(self.core_config)
             if edited is None:
+                logging.info("on_model_config: canceled after %.3fs", time.monotonic() - started)
                 return
             save_core_config(edited)
             self.core_config = load_core_config()
@@ -1759,6 +1723,7 @@ class SenseVoiceMenuBarApp(rumps.App):
                 self.core_config.merge_vad,
                 self.core_config.remove_emoji,
             )
+            logging.info("on_model_config: saved in %.3fs", time.monotonic() - started)
             ui_alert("Model Config 已保存。新参数将从下一次录音开始生效。")
         except Exception as exc:
             logging.exception("on_model_config failed: %s", exc)
