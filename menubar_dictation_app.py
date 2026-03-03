@@ -4,6 +4,7 @@ import fcntl
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -40,6 +41,21 @@ APP_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
 APP_BUILD = "2026-03-03-b12"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
+EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001F5FF"
+    "\U0001F600-\U0001F64F"
+    "\U0001F680-\U0001F6FF"
+    "\U0001F700-\U0001F77F"
+    "\U0001F780-\U0001F7FF"
+    "\U0001F800-\U0001F8FF"
+    "\U0001F900-\U0001F9FF"
+    "\U0001FA00-\U0001FAFF"
+    "\u2600-\u26FF"
+    "\u2700-\u27BF"
+    "]+",
+    flags=re.UNICODE,
+)
 AUTOSTART_PLIST = Path.home() / "Library/LaunchAgents/com.lee.sensevoice.menubar.plist"
 AUTOSTART_RUNNER = (
     Path.home() / "Library/Application Support/SenseVoiceDictation/autostart_runner.sh"
@@ -118,6 +134,10 @@ class CoreConfig:
     channels: int = 1
     paste_delay_ms: int = 40
     enable_beep: bool = True
+    use_itn: bool = False
+    batch_size_s: int = 10
+    merge_vad: bool = False
+    remove_emoji: bool = True
 
 
 @dataclass
@@ -140,6 +160,10 @@ def load_core_config() -> CoreConfig:
         channels=int(data.get("channels", 1)),
         paste_delay_ms=int(data.get("paste_delay_ms", 40)),
         enable_beep=bool(data.get("enable_beep", True)),
+        use_itn=bool(data.get("use_itn", False)),
+        batch_size_s=int(data.get("batch_size_s", 10)),
+        merge_vad=bool(data.get("merge_vad", False)),
+        remove_emoji=bool(data.get("remove_emoji", True)),
     )
 
 
@@ -868,6 +892,13 @@ class DictationEngine:
             check=False,
         )
 
+    @staticmethod
+    def _cleanup_text(text: str, remove_emoji: bool) -> str:
+        if remove_emoji:
+            text = EMOJI_RE.sub("", text)
+        text = re.sub(r"\s+", " ", text)
+        return text.strip()
+
     def start_recording(self) -> None:
         if not self._ensure_model():
             return
@@ -938,13 +969,14 @@ class DictationEngine:
                 input=pcm,
                 cache={},
                 language=self.config.language,
-                use_itn=False,
-                batch_size_s=10,
-                merge_vad=False,
+                use_itn=self.config.use_itn,
+                batch_size_s=self.config.batch_size_s,
+                merge_vad=self.config.merge_vad,
                 fs=self.config.sample_rate,
             )
             raw_text = result[0].get("text", "") if result else ""
-            text = rich_transcription_postprocess(raw_text).strip()
+            text = rich_transcription_postprocess(raw_text)
+            text = self._cleanup_text(text, self.config.remove_emoji)
             if text and not self.shutdown_flag:
                 self._paste_text(text)
             done_ts = time.monotonic()

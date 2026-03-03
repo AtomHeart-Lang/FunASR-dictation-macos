@@ -53,6 +53,16 @@ Installer options:
 
 Or run from desktop/application icon after `./create_launcher.sh`.
 
+## SenseVoice Tuning
+
+Edit `config.toml`:
+
+- `language`: `auto|zh|en|yue|ja|ko|nospeech` (for Chinese accuracy, prefer `zh`)
+- `use_itn`: enable text normalization for numbers/date formatting
+- `batch_size_s`: inference batch seconds (default `10`)
+- `merge_vad`: merge VAD segments (default `false`)
+- `remove_emoji`: remove emoji symbols from final pasted text (default `true`)
+
 ## Menubar States
 
 - `○` OFF

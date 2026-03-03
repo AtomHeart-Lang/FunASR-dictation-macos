@@ -53,6 +53,16 @@ SenseVoice Dictation 是一个 macOS 菜单栏语音输入工具：
 
 也可以在执行 `./create_launcher.sh` 后，直接双击应用/桌面图标启动。
 
+## SenseVoice 调参
+
+可在 `config.toml` 中配置：
+
+- `language`: `auto|zh|en|yue|ja|ko|nospeech`（中文场景建议用 `zh`）
+- `use_itn`: 文本归一化（数字/日期格式化）
+- `batch_size_s`: 推理 batch 秒数（默认 `10`）
+- `merge_vad`: 是否合并 VAD 分段（默认 `false`）
+- `remove_emoji`: 去除最终粘贴文本中的表情符号（默认 `true`）
+
 ## 菜单栏状态
 
 - `○` 关闭

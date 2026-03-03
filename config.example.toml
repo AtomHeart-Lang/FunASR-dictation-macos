@@ -6,6 +6,7 @@
 hotkey = "<ctrl>+<alt>+<space>"
 
 # SenseVoice language: auto, zh, en, yue, ja, ko, nospeech
+# For better Chinese accuracy, prefer "zh" instead of "auto".
 language = "auto"
 
 # Audio configuration
@@ -17,3 +18,12 @@ paste_delay_ms = 40
 
 # Enable system sound when start/stop recording
 enable_beep = true
+
+# SenseVoice inference options
+# ITN: normalize numbers/date etc., may improve readability in some cases.
+use_itn = false
+batch_size_s = 10
+merge_vad = false
+
+# Remove emoji symbols from final pasted text.
+remove_emoji = true
