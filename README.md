@@ -1,72 +1,183 @@
-# SenseVoice Dictation for macOS (Bilingual / 中英双语)
+# SenseVoice Dictation for macOS
 
-A macOS menubar app for press-to-record, speech-to-text, and auto-paste into any text box.
-这是一个 macOS 菜单栏语音转文字应用：按快捷键开始录音，再按一次停止，自动转写并粘贴到当前文本框。
+A menubar dictation app for macOS:
+- Press trigger once to start recording
+- Press again to stop
+- Transcribe with SenseVoice
+- Auto-paste into the active text box
 
-## Quick Start / 快速开始
+## Features
 
-1. Install / 安装
+- Menubar status indicators (off/loading/ready/recording/transcribing/error/updating)
+- Keyboard trigger and mouse trigger
+- Manual trigger configuration
+- Model update from menu (`Update Model`)
+- Autostart via LaunchAgent
+- Clickable launcher app (Applications + Desktop)
+- One-command uninstall and cleanup
+
+## Requirements
+
+- macOS 11+
+- Python 3.11+
+- Xcode Command Line Tools (`clang`) for launcher generation
+
+Optional:
+- `ffmpeg` (not required by this app flow)
+
+## Installation
+
 ```bash
 ./install.sh
 ```
 
-2. Run / 启动
+Default installer actions:
+1. Create `.venv`
+2. Install Python dependencies from `requirements.txt`
+3. Create `config.toml` from `config.example.toml` if missing
+4. Pre-download SenseVoice + VAD models
+5. Create launcher app in `~/Applications` and Desktop
+
+Installer options:
+- `--no-model`
+- `--no-launcher`
+- `--autostart`
+
+## Run
+
 ```bash
 ./start_app.sh
 ```
 
-3. Optional autostart / 可选：开机自启
-```bash
-./enable_autostart.sh
-```
+## Menubar States
 
-4. Optional clickable launcher / 可选：创建可点击桌面与应用图标
-```bash
-./create_launcher.sh
-```
+- `○` OFF
+- `…` LOADING
+- `⇡` UPDATING
+- `✓` READY
+- `●` RECORDING
+- `↻` TRANSCRIBING
+- `!` ERROR
 
-## Main Scripts / 主要脚本
+## Menu Items
 
-- `install.sh`: one-click install dependencies + optional model prefetch + launcher creation.
-- `start_app.sh`: start menubar app.
-- `enable_autostart.sh` / `disable_autostart.sh`: manage macOS LaunchAgent.
-- `create_launcher.sh` / `remove_launcher.sh`: create/remove `.app` launcher in `~/Applications` and Desktop.
-- `uninstall.sh`: full uninstall (venv, model cache, launcher, launch agents, runtime files).
-- `prepare_release.sh`: clean local artifacts and create a GitHub-ready zip package.
+- `Toggle Dictation`
+- `Use Keyboard Trigger`
+- `Use Mouse Trigger`
+- `Set Keyboard Hotkey`
+- `Set Mouse Button`
+- `Update Model`
+- `Enable Dictation On App Start`
+- `Quit App`
 
-Legacy compatibility wrappers are still kept:
-`install_local_dependencies.sh`, `start_menubar_app.sh`, `enable_menubar_autostart.sh`, `disable_menubar_autostart.sh`, `create_clickable_launcher.sh`, `remove_clickable_launcher.sh`, `uninstall_sensevoice_hotkey.sh`.
+## Script Reference
 
-## Permissions / 权限
+### Core scripts
 
-Grant these permissions to your terminal / launcher process:
-- Microphone
-- Accessibility
-- Input Monitoring
+- `install.sh`: install environment/dependencies and optional setup steps
+- `start_app.sh`: start menubar app (single-instance guarded)
+- `enable_autostart.sh`: enable LaunchAgent autostart
+- `disable_autostart.sh`: disable LaunchAgent autostart
+- `create_launcher.sh`: create clickable `.app` launcher
+- `remove_launcher.sh`: remove clickable launcher
+- `uninstall.sh`: uninstall and cleanup runtime/model/env
+- `prepare_release.sh`: clean artifacts and produce release zip
 
-## Settings / 设置
+### Uninstall behavior
 
-- Keyboard hotkey / 键盘快捷键: menu -> `Set Keyboard Hotkey`
-- Mouse trigger / 鼠标触发键: menu -> `Set Mouse Button`
-- Trigger mode / 触发方式切换: `Use Keyboard Trigger` / `Use Mouse Trigger`
-- Model update / 更新模型: menu -> `Update Model`
+`./uninstall.sh` removes:
+- launch agents
+- running app processes
+- SenseVoice model cache
+- `.venv`
+- local logs/locks/runtime config
+- launcher apps in Applications/Desktop
 
-Key token reference: see `可用快捷键字符列表.txt`.
+Also supports full source removal:
 
-## Uninstall / 卸载
-
-Standard uninstall (keep source folder):
-```bash
-./uninstall.sh
-```
-
-Full uninstall including source folder:
 ```bash
 ./uninstall.sh --delete-project-dir
 ```
 
-## Detailed Docs / 详细文档
+## Keyboard Hotkey Token List
 
-- Chinese: `README.zh-CN.md`
-- English: `README.en.md`
-- Script reference (CN+EN): `SCRIPTS.md`
+### Format
+
+- Use `modifier+key`, e.g. `<ctrl>+a`, `<ctrl>+<left>`, `<cmd>+<shift>+<f8>`
+
+### Modifiers
+
+- `<ctrl>`
+- `<alt>`
+- `<cmd>`
+- `<shift>`
+
+Notes:
+- `<option>` is normalized to `<alt>`
+
+### Main keys
+
+Letters:
+- `a` `b` `c` `d` `e` `f` `g` `h` `i` `j` `k` `l` `m` `n` `o` `p` `q` `r` `s` `t` `u` `v` `w` `x` `y` `z`
+
+Numbers:
+- `0 1 2 3 4 5 6 7 8 9`
+
+Symbols:
+- `=` `-` `[` `]` `;` `'` `\\` `,` `.` `/` `` ` ``
+
+Special keys:
+- `<space>`
+- `<enter>`
+- `<tab>`
+- `<backspace>`
+- `<delete>`
+- `<esc>`
+- `<left>` `<right>` `<up>` `<down>`
+- `<home>` `<end>` `<pgup>` `<pgdn>`
+
+Function keys:
+- `<f1>` ... `<f19>`
+
+## Mouse Trigger Token List
+
+Preferred values:
+- `left`
+- `right`
+- `middle`
+- `x1`
+- `x2`
+
+Equivalent aliases:
+- `button0` -> `left`
+- `button1` -> `right`
+- `button2` -> `middle`
+- `button3` -> `x1`
+- `button4` -> `x2`
+- `primary` -> `left`
+- `secondary` -> `right`
+
+Extended buttons:
+- `button5` ... `button24`
+
+## Permissions
+
+Grant permissions to the terminal/launcher process:
+- Microphone
+- Accessibility
+- Input Monitoring
+
+## GitHub Sharing
+
+Create release package:
+
+```bash
+./prepare_release.sh
+```
+
+This generates:
+- `sensevoice-dictation-macos-release.zip`
+
+## Chinese Documentation
+
+- `README.zh-CN.md`
