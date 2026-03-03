@@ -27,10 +27,16 @@ from AppKit import (
     NSButton,
     NSControlStateValueOn,
     NSImage,
+    NSImageView,
     NSMakeRect,
+    NSProgressIndicator,
+    NSProgressIndicatorStyleSpinning,
     NSSwitchButton,
     NSTextField,
     NSView,
+    NSWindow,
+    NSWindowStyleMaskTitled,
+    NSBackingStoreBuffered,
 )
 from Foundation import NSBundle, NSDate, NSRunLoop
 from funasr import AutoModel
@@ -190,6 +196,79 @@ def run_with_ui_responsiveness(task_name: str, fn: Callable[[], object]):
     if holder["error"] is not None:
         raise holder["error"]
     return holder["value"]
+
+
+def _show_capture_progress_window(title: str, message: str):
+    app = NSApplication.sharedApplication()
+    app.activateIgnoringOtherApps_(True)
+    window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+        NSMakeRect(0, 0, 420, 150),
+        NSWindowStyleMaskTitled,
+        NSBackingStoreBuffered,
+        False,
+    )
+    window.setTitle_(title)
+    window.center()
+    window.setReleasedWhenClosed_(False)
+
+    content = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 420, 150))
+    window.setContentView_(content)
+
+    icon = _app_icon_image()
+    if icon is not None:
+        icon_view = NSImageView.alloc().initWithFrame_(NSMakeRect(20, 84, 46, 46))
+        icon_view.setImage_(icon)
+        content.addSubview_(icon_view)
+
+    msg = NSTextField.alloc().initWithFrame_(NSMakeRect(80, 88, 320, 44))
+    msg.setEditable_(False)
+    msg.setBezeled_(False)
+    msg.setDrawsBackground_(False)
+    msg.setSelectable_(False)
+    msg.setStringValue_(message)
+    content.addSubview_(msg)
+
+    spinner = NSProgressIndicator.alloc().initWithFrame_(NSMakeRect(80, 52, 24, 24))
+    spinner.setIndeterminate_(True)
+    try:
+        spinner.setStyle_(NSProgressIndicatorStyleSpinning)
+    except Exception:
+        pass
+    spinner.startAnimation_(None)
+    content.addSubview_(spinner)
+
+    hint = NSTextField.alloc().initWithFrame_(NSMakeRect(112, 54, 288, 20))
+    hint.setEditable_(False)
+    hint.setBezeled_(False)
+    hint.setDrawsBackground_(False)
+    hint.setSelectable_(False)
+    hint.setStringValue_("正在识别，请按下目标按键...")
+    content.addSubview_(hint)
+
+    window.makeKeyAndOrderFront_(None)
+    return window
+
+
+def run_with_progress_window(
+    task_name: str,
+    progress_title: str,
+    progress_message: str,
+    fn: Callable[[], object],
+):
+    window = None
+    try:
+        window = _show_capture_progress_window(progress_title, progress_message)
+    except Exception as exc:
+        logging.warning("show progress window failed: %s", exc)
+    try:
+        return run_with_ui_responsiveness(task_name, fn)
+    finally:
+        if window is not None:
+            try:
+                window.orderOut_(None)
+                window.close()
+            except Exception:
+                pass
 
 
 def notify_user(title: str, subtitle: str, message: str) -> None:
@@ -866,8 +945,10 @@ def choose_hotkey_with_capture(current_value: str) -> Optional[str]:
         "Listening for 8 seconds",
         "Press your desired key combination now. Esc cancels capture.",
     )
-    captured, err = run_with_ui_responsiveness(
+    captured, err = run_with_progress_window(
         "capture_keyboard_hotkey",
+        "Set Keyboard Hotkey",
+        "正在识别快捷键（最多 8 秒）",
         lambda: capture_keyboard_hotkey(timeout_s=8.0),
     )
     if captured:
@@ -1090,8 +1171,10 @@ def choose_mouse_button_with_capture(current_value: str) -> Optional[str]:
         "Listening for 20 seconds",
         "Click your target mouse button now. Left/right are ignored.",
     )
-    captured, err = run_with_ui_responsiveness(
+    captured, err = run_with_progress_window(
         "capture_mouse_button_primary",
+        "Set Mouse Button",
+        "正在识别鼠标按键（最多 20 秒）",
         lambda: capture_mouse_button(timeout_s=20.0, tap_location=EVENT_TAP_LOCATION),
     )
     if not captured:
@@ -1102,8 +1185,10 @@ def choose_mouse_button_with_capture(current_value: str) -> Optional[str]:
                 "Fallback capture",
                 "Trying HID event tap fallback...",
             )
-            hid_captured, hid_err = run_with_ui_responsiveness(
+            hid_captured, hid_err = run_with_progress_window(
                 "capture_mouse_button_hid",
+                "Set Mouse Button",
+                "尝试备用识别（HID 事件，最多 8 秒）",
                 lambda: capture_mouse_button(timeout_s=8.0, tap_location=hid_location),
             )
             if hid_captured:
@@ -1117,8 +1202,10 @@ def choose_mouse_button_with_capture(current_value: str) -> Optional[str]:
             "Fallback capture",
             "Trying pynput mouse listener fallback...",
         )
-        fallback_captured, fallback_err = run_with_ui_responsiveness(
+        fallback_captured, fallback_err = run_with_progress_window(
             "capture_mouse_button_pynput",
+            "Set Mouse Button",
+            "尝试备用识别（pynput，最多 12 秒）",
             lambda: capture_mouse_button_pynput(timeout_s=12.0),
         )
         if fallback_captured:
