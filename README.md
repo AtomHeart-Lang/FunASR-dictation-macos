@@ -155,13 +155,13 @@ Supported values:
 - `button2` -> `middle`
 - `button3` -> `x1`
 - `button4` -> `x2`
-- `button5` ... `button24`
+- `buttonN` (`N >= 5`, device-dependent)
 
 Important:
 - `left` and `right` are intentionally disabled to avoid conflicts with normal clicking.
 - Mouse button numbering is device-dependent. `buttonN` means the raw button number reported by macOS for your specific mouse.
 - Recommended workflow: use `Set Mouse Button` and click your target mouse key to auto-capture it, then save.
-- Manual input is still supported for `middle`, `x1`, `x2`, `button5` ... `button24`.
+- Manual input is still supported for `middle`, `x1`, `x2`, and `buttonN` (`N >= 2`, except `0/1`).
 
 ## Permissions
 

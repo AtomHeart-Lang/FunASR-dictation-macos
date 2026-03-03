@@ -509,20 +509,22 @@ def normalize_mouse_button(value: str) -> Optional[str]:
 
     if raw.startswith("button") and raw[6:].isdigit():
         idx = int(raw[6:])
+        if idx in (0, 1):
+            return None
         if idx == 2:
             return "middle"
         if idx == 3:
             return "x1"
         if idx == 4:
             return "x2"
-        if 5 <= idx <= 24:
+        if idx >= 5:
             return f"button{idx}"
     return None
 
 
 def prompt_mouse_text_fallback(current_value: str) -> Optional[str]:
     text = ui_prompt_text(
-        message="手动输入鼠标触发键（例如 x1、x2、middle、button5）。\n不支持 left/right。",
+        message="手动输入鼠标触发键（例如 x1、x2、middle、button8）。\n不支持 left/right。",
         title="Set Mouse Button (Manual)",
         default_text=current_value,
         ok_text="保存",
@@ -564,8 +566,10 @@ def release_single_instance() -> None:
     LOCK_FD = None
 
 
-def capture_mouse_button(timeout_s: float = 8.0):
-    logging.info("capture_mouse_button: start")
+def capture_mouse_button(timeout_s: float = 8.0, tap_location: Optional[int] = None):
+    if tap_location is None:
+        tap_location = EVENT_TAP_LOCATION
+    logging.info("capture_mouse_button: start tap_location=%s", tap_location)
     result = {"value": None, "err": None}
     done = threading.Event()
     started = threading.Event()
@@ -610,7 +614,7 @@ def capture_mouse_button(timeout_s: float = 8.0):
 
         tap_ref = {"tap": None}
         tap_ref["tap"] = Quartz.CGEventTapCreate(
-            EVENT_TAP_LOCATION,
+            tap_location,
             Quartz.kCGHeadInsertEventTap,
             Quartz.kCGEventTapOptionDefault,
             event_mask,
@@ -641,11 +645,11 @@ def capture_mouse_button(timeout_s: float = 8.0):
     started.wait(timeout=1.0)
     done.wait(timeout=timeout_s + 0.5)
     if result["value"]:
-        logging.info("capture_mouse_button: captured=%s", result["value"])
+        logging.info("capture_mouse_button: captured=%s tap_location=%s", result["value"], tap_location)
     elif result["err"]:
-        logging.warning("capture_mouse_button: error=%s", result["err"])
+        logging.warning("capture_mouse_button: error=%s tap_location=%s", result["err"], tap_location)
     else:
-        logging.info("capture_mouse_button: timeout")
+        logging.info("capture_mouse_button: timeout tap_location=%s", tap_location)
     return result["value"], result["err"]
 
 
@@ -661,6 +665,8 @@ def capture_mouse_button_pynput(timeout_s: float = 6.0):
         name = getattr(button, "name", str(button))
         token = str(name).lower().replace("button.", "")
         normalized = normalize_mouse_button(token)
+        # Some drivers expose auxiliary buttons as unknown in pynput on macOS.
+        # Keep logs explicit and let Quartz path handle raw button numbers.
         logging.info(
             "capture_mouse_button_pynput: token=%s normalized=%s",
             token,
@@ -695,14 +701,26 @@ def capture_mouse_button_pynput(timeout_s: float = 6.0):
 
 
 def choose_mouse_button_with_capture(current_value: str) -> Optional[str]:
-    ui_alert(
-        "请在 8 秒内点击要设置的鼠标按键。\n"
-        "左键/右键会被忽略。\n"
-        "若未识别到，将进入手动输入。"
-    )
-    captured, err = capture_mouse_button(timeout_s=8.0)
+    try:
+        rumps.notification(
+            "SenseVoice Dictation",
+            "Set Mouse Button",
+            "请在 20 秒内点击目标鼠标键（左键/右键会忽略）。",
+        )
+    except Exception:
+        pass
+    captured, err = capture_mouse_button(timeout_s=20.0, tap_location=EVENT_TAP_LOCATION)
     if not captured:
-        fallback_captured, fallback_err = capture_mouse_button_pynput(timeout_s=6.0)
+        hid_location = getattr(Quartz, "kCGHIDEventTap", None)
+        if hid_location is not None:
+            hid_captured, hid_err = capture_mouse_button(timeout_s=8.0, tap_location=hid_location)
+            if hid_captured:
+                captured = hid_captured
+                err = None
+            elif err is None:
+                err = hid_err
+    if not captured:
+        fallback_captured, fallback_err = capture_mouse_button_pynput(timeout_s=12.0)
         if fallback_captured:
             captured = fallback_captured
             err = None
@@ -720,7 +738,7 @@ def choose_mouse_button_with_capture(current_value: str) -> Optional[str]:
             return None
         normalized = normalize_mouse_button(edited)
         if normalized is None:
-            ui_alert("鼠标按键格式无效。支持 middle、x1、x2、button5..button24。")
+            ui_alert("鼠标按键格式无效。支持 middle、x1、x2、buttonN（N>=2，且不含 0/1）。")
             return None
         return normalized
 
