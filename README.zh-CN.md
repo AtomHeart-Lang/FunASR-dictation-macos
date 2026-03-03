@@ -9,6 +9,7 @@ SenseVoice Dictation 是一个 macOS 菜单栏语音输入工具：
 ## 功能特性
 
 - 菜单栏状态指示（关闭/加载/更新/就绪/录音/转写/错误）
+- UI 文案跟随系统语言：系统为中文时菜单/提示全中文；系统为英文或其他语言时全英文
 - 支持键盘触发和鼠标触发
 - 支持手动输入触发配置
 - 支持在菜单中更新模型（`Update Model`）
@@ -55,7 +56,9 @@ SenseVoice Dictation 是一个 macOS 菜单栏语音输入工具：
 
 ## SenseVoice 调参
 
-可在 `config.toml` 中配置：
+推荐直接在菜单 `Model Config` 中修改并保存参数（UI 方式）。
+
+UI 保存后会自动写入 `config.toml` 持久化；手动改文件属于可选高级方式。
 
 - `language`: `auto|zh|en|yue|ja|ko|nospeech`（中文场景建议用 `zh`）
 - `use_itn`: 文本归一化（数字/日期格式化）
@@ -99,8 +102,11 @@ Model Config 窗口包含以下字段：
 
 ### 如何修改
 
-1. 打开 `config.toml`
-2. 修改参数，例如：
+1. 打开菜单 `Model Config`
+2. 修改参数后点击 `Save`
+3. 新参数会从下一次录音开始生效
+
+可选（高级）：手动编辑 `config.toml`，例如：
 
 ```toml
 language = "zh"
@@ -109,7 +115,7 @@ merge_vad = false
 remove_emoji = true
 ```
 
-3. 保存后重启菜单栏应用
+然后重启菜单栏应用。
 
 ## 菜单栏状态
 
@@ -133,6 +139,19 @@ remove_emoji = true
 - `Enable Dictation On App Start`
 - `Enable Launch At Login`
 - `Quit App`
+
+### 菜单中英文名称对照
+
+- `Toggle Dictation` / `开关语音输入`
+- `Use Keyboard Trigger` / `使用键盘触发`
+- `Use Mouse Trigger` / `使用鼠标触发`
+- `Set Keyboard Hotkey` / `设置键盘快捷键`
+- `Set Mouse Button` / `设置鼠标按键`
+- `Model Config` / `模型参数设置`
+- `Update Model` / `更新模型`
+- `Enable Dictation On App Start` / `应用启动时自动开启听写`
+- `Enable Launch At Login` / `开机自动启动`
+- `Quit App` / `退出应用`
 
 ## 触发键设置流程
 

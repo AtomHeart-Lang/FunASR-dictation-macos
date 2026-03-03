@@ -9,6 +9,7 @@ SenseVoice Dictation is a macOS menubar app for push-to-talk dictation:
 ## Features
 
 - Menubar status indicators (off/loading/updating/ready/recording/transcribing/error)
+- UI language follows system language: Chinese system -> all menus/prompts in Chinese; all other languages -> English
 - Keyboard trigger and mouse trigger
 - Manual trigger configuration dialogs
 - Model refresh from menu (`Update Model`)
@@ -55,7 +56,9 @@ Or run from desktop/application icon after `./create_launcher.sh`.
 
 ## SenseVoice Tuning
 
-Edit `config.toml`:
+Use menu `Model Config` to edit and save runtime parameters directly in UI.
+
+The UI writes values into `config.toml` for persistence. Manual file editing is optional.
 
 - `language`: `auto|zh|en|yue|ja|ko|nospeech` (for Chinese accuracy, prefer `zh`)
 - `use_itn`: enable text normalization for numbers/date formatting
@@ -99,8 +102,11 @@ Practical recommendation:
 
 ### How to change
 
-1. Open `config.toml`.
-2. Edit values, for example:
+1. Open menu `Model Config`.
+2. Edit values and click `Save`.
+3. Changes apply from the next recording.
+
+Optional (advanced): edit `config.toml` manually, for example:
 
 ```toml
 language = "zh"
@@ -109,7 +115,7 @@ merge_vad = false
 remove_emoji = true
 ```
 
-3. Save and restart the menubar app.
+Then restart the menubar app.
 
 ## Menubar States
 
@@ -133,6 +139,19 @@ remove_emoji = true
 - `Enable Dictation On App Start`
 - `Enable Launch At Login`
 - `Quit App`
+
+### Menu Name Mapping (EN/CN)
+
+- `Toggle Dictation` / `开关语音输入`
+- `Use Keyboard Trigger` / `使用键盘触发`
+- `Use Mouse Trigger` / `使用鼠标触发`
+- `Set Keyboard Hotkey` / `设置键盘快捷键`
+- `Set Mouse Button` / `设置鼠标按键`
+- `Model Config` / `模型参数设置`
+- `Update Model` / `更新模型`
+- `Enable Dictation On App Start` / `应用启动时自动开启听写`
+- `Enable Launch At Login` / `开机自动启动`
+- `Quit App` / `退出应用`
 
 ## Trigger Setup Flow
 
