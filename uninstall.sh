@@ -61,6 +61,7 @@ done
 echo "[Step] Remove runtime artifacts"
 rm -rf "$APP_DIR/.venv" "$APP_DIR/__pycache__"
 rm -f "$APP_DIR"/*.log
+rm -f "$APP_DIR/menubar.out.log" "$APP_DIR/menubar.err.log"
 rm -f "$APP_DIR"/*.lock
 rm -f "$APP_DIR/ui_settings.json"
 rm -f "$APP_DIR/config.toml"

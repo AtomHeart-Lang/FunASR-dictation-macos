@@ -37,9 +37,12 @@ LOG_PATH = APP_DIR / "menubar_debug.log"
 LOCK_PATH = APP_DIR / "menubar_app.lock"
 MODEL_NAME = "iic/SenseVoiceSmall"
 APP_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
-APP_BUILD = "2026-03-03-b10"
+APP_BUILD = "2026-03-03-b11"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
+AUTOSTART_PLIST = Path.home() / "Library/LaunchAgents/com.lee.sensevoice.menubar.plist"
+ENABLE_AUTOSTART_SCRIPT = APP_DIR / "enable_autostart.sh"
+DISABLE_AUTOSTART_SCRIPT = APP_DIR / "disable_autostart.sh"
 MODEL_CACHE_DIRS = [
     Path.home() / ".cache/modelscope/hub/models/iic/SenseVoiceSmall",
     Path.home() / ".cache/modelscope/hub/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
@@ -329,6 +332,23 @@ def ensure_listen_permission() -> bool:
     if not ok:
         logging.warning("listen permission missing: Input Monitoring/Accessibility not granted")
     return ok
+
+
+def is_os_autostart_enabled() -> bool:
+    return AUTOSTART_PLIST.exists()
+
+
+def set_os_autostart_enabled(enable: bool) -> None:
+    script = ENABLE_AUTOSTART_SCRIPT if enable else DISABLE_AUTOSTART_SCRIPT
+    if not script.exists():
+        raise RuntimeError(f"Autostart script not found: {script}")
+    subprocess.run(
+        ["/bin/bash", str(script)],
+        cwd=str(APP_DIR),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
+    )
 
 
 def button_number_to_name(button_number: int) -> str:
@@ -1088,6 +1108,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.status_item = rumps.MenuItem("Status: OFF")
         self.trigger_item = rumps.MenuItem("Trigger: keyboard <ctrl>+<alt>+<space>")
         self.auto_on_item = rumps.MenuItem("Enable Dictation On App Start")
+        self.launch_login_item = rumps.MenuItem("Enable Launch At Login")
         self.build_item = rumps.MenuItem(f"Build: {APP_BUILD}")
 
         self.menu = [
@@ -1101,6 +1122,7 @@ class SenseVoiceMenuBarApp(rumps.App):
             "Set Mouse Button",
             "Update Model",
             self.auto_on_item,
+            self.launch_login_item,
             self.build_item,
             None,
             "Quit App",
@@ -1187,6 +1209,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.trigger_item.title = f"Trigger: {mode_text}"
 
         self.auto_on_item.state = 1 if self.ui_settings.enable_dictation_on_app_start else 0
+        self.launch_login_item.state = 1 if is_os_autostart_enabled() else 0
 
     def restart_trigger(self) -> None:
         if not self.dictation_enabled:
@@ -1365,6 +1388,16 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.ui_settings.enable_dictation_on_app_start = not self.ui_settings.enable_dictation_on_app_start
         save_ui_settings(self.ui_settings)
         self.refresh_ui_labels()
+
+    @rumps.clicked("Enable Launch At Login")
+    def on_toggle_launch_at_login(self, sender):
+        try:
+            target = not is_os_autostart_enabled()
+            set_os_autostart_enabled(target)
+            self.refresh_ui_labels()
+        except Exception as exc:
+            logging.exception("toggle launch at login failed: %s", exc)
+            ui_alert(f"Failed to update Launch At Login: {exc}")
 
     @rumps.clicked("Quit App")
     def on_quit(self, _):

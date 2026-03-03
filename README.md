@@ -1,19 +1,21 @@
 # SenseVoice Dictation for macOS
 
-A menubar dictation app for macOS:
-- Press trigger once to start recording
-- Press again to stop
-- Transcribe with SenseVoice
-- Auto-paste into the active text box
+SenseVoice Dictation is a macOS menubar app for push-to-talk dictation:
+- press the trigger once to start recording
+- press again to stop
+- transcribe with SenseVoice
+- auto-paste into the active text box
 
 ## Features
 
-- Menubar status indicators (off/loading/ready/recording/transcribing/error/updating)
+- Menubar status indicators (off/loading/updating/ready/recording/transcribing/error)
 - Keyboard trigger and mouse trigger
-- Manual trigger configuration
-- Model update from menu (`Update Model`)
-- Autostart via LaunchAgent
-- Clickable launcher app (Applications + Desktop symlink)
+- Manual trigger configuration dialogs
+- Model refresh from menu (`Update Model`)
+- OS autostart toggle from menu (`Enable Launch At Login`)
+- Dictation-on-app-start toggle from menu (`Enable Dictation On App Start`)
+- Clickable launcher app in `~/Applications`
+- Desktop shortcut as a symlink to the same app (prevents duplicate permission entries)
 - One-command uninstall and cleanup
 
 ## Requirements
@@ -31,12 +33,12 @@ Optional:
 ./install.sh
 ```
 
-Default installer actions:
-1. Create `.venv`
-2. Install Python dependencies from `requirements.txt`
-3. Create `config.toml` from `config.example.toml` if missing
-4. Pre-download SenseVoice + VAD models
-5. Create launcher app in `~/Applications` and Desktop (Desktop is a symlink)
+Default installer behavior:
+1. create `.venv`
+2. install Python dependencies (`requirements.txt`)
+3. create `config.toml` from `config.example.toml` if missing
+4. pre-download SenseVoice + VAD models
+5. create launcher app in `~/Applications` and Desktop shortcut symlink
 
 Installer options:
 - `--no-model`
@@ -48,6 +50,8 @@ Installer options:
 ```bash
 ./start_app.sh
 ```
+
+Or run from desktop/application icon after `./create_launcher.sh`.
 
 ## Menubar States
 
@@ -68,6 +72,7 @@ Installer options:
 - `Set Mouse Button`
 - `Update Model`
 - `Enable Dictation On App Start`
+- `Enable Launch At Login`
 - `Quit App`
 
 ## Script Reference
@@ -78,9 +83,9 @@ Installer options:
 - `start_app.sh`: start menubar app
 - `enable_autostart.sh`: enable LaunchAgent autostart
 - `disable_autostart.sh`: disable LaunchAgent autostart
-- `create_launcher.sh`: create clickable `.app` launcher
-- `launch_from_desktop.sh`: desktop launcher entry (Terminal-based startup path)
-- `remove_launcher.sh`: remove clickable launcher
+- `create_launcher.sh`: create clickable `.app` launcher in Applications + Desktop symlink
+- `launch_from_desktop.sh`: desktop launcher entrypoint (silent background startup)
+- `remove_launcher.sh`: remove launcher app + Desktop shortcut symlink
 - `uninstall.sh`: uninstall and cleanup runtime/model/env
 - `prepare_release.sh`: clean artifacts and produce release zip
 
@@ -93,6 +98,7 @@ Installer options:
 - `.venv`
 - local logs/locks/runtime config
 - launcher apps in Applications/Desktop
+- TCC entries for known app identifiers (best effort reset)
 
 Also supports full source removal:
 
@@ -104,7 +110,10 @@ Also supports full source removal:
 
 ### Format
 
-- Use `modifier+key`, e.g. `<ctrl>+a`, `<ctrl>+<left>`, `<cmd>+<shift>+<f8>`
+- Use `modifier+key`, for example:
+  - `<ctrl>+a`
+  - `<ctrl>+<left>`
+  - `<cmd>+<shift>+<f8>`
 
 ### Modifiers
 
@@ -163,24 +172,24 @@ Extended buttons:
 
 ## Permissions
 
-Grant permissions to the terminal/launcher process:
+Grant permissions to the actual running process chain:
 - Microphone
 - Accessibility
 - Input Monitoring
 
-Launcher note:
-- Desktop launcher starts through Terminal path for stable keyboard event-tap permission behavior.
-- Keep Terminal granted in Accessibility and Input Monitoring.
+Notes:
+- If launch from Terminal works but launcher fails, re-create launcher and re-check permissions.
+- Desktop shortcut points to the same app in `~/Applications` to avoid duplicate TCC rows.
 
 ## GitHub Sharing
 
-Create release package:
+Create a release package:
 
 ```bash
 ./prepare_release.sh
 ```
 
-This generates:
+Generated file:
 - `sensevoice-dictation-macos-release.zip`
 
 ## Chinese Documentation

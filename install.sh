@@ -4,6 +4,17 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$APP_DIR"
 
+chmod +x \
+  ./install.sh \
+  ./start_app.sh \
+  ./create_launcher.sh \
+  ./launch_from_desktop.sh \
+  ./remove_launcher.sh \
+  ./enable_autostart.sh \
+  ./disable_autostart.sh \
+  ./uninstall.sh \
+  ./prepare_release.sh
+
 WITH_MODEL=1
 WITH_LAUNCHER=1
 WITH_AUTOSTART=0
