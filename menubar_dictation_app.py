@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -36,8 +37,9 @@ LOG_PATH = APP_DIR / "menubar_debug.log"
 LOCK_PATH = APP_DIR / "menubar_app.lock"
 MODEL_NAME = "iic/SenseVoiceSmall"
 APP_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
-APP_BUILD = "2026-03-02-b9"
+APP_BUILD = "2026-03-03-b10"
 LOCK_FD = None
+EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 MODEL_CACHE_DIRS = [
     Path.home() / ".cache/modelscope/hub/models/iic/SenseVoiceSmall",
     Path.home() / ".cache/modelscope/hub/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
@@ -49,7 +51,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     force=True,
 )
-logging.info("menubar app module loaded")
+logging.info("menubar app module loaded, python=%s", sys.executable)
 
 
 def _applescript_escape(text: str) -> str:
@@ -375,7 +377,7 @@ def capture_keyboard_hotkey(timeout_s: float = 8.0):
 
     try:
         tap_ref["tap"] = Quartz.CGEventTapCreate(
-            Quartz.kCGHIDEventTap,
+            EVENT_TAP_LOCATION,
             Quartz.kCGHeadInsertEventTap,
             Quartz.kCGEventTapOptionDefault,
             event_mask,
@@ -545,7 +547,7 @@ def capture_mouse_button(timeout_s: float = 8.0):
 
         tap_ref = {"tap": None}
         tap_ref["tap"] = Quartz.CGEventTapCreate(
-            Quartz.kCGHIDEventTap,
+            EVENT_TAP_LOCATION,
             Quartz.kCGHeadInsertEventTap,
             Quartz.kCGEventTapOptionDefault,
             event_mask,
@@ -953,7 +955,7 @@ class TriggerController:
                     return event
 
                 self.keyboard_tap = Quartz.CGEventTapCreate(
-                    Quartz.kCGHIDEventTap,
+                    EVENT_TAP_LOCATION,
                     Quartz.kCGHeadInsertEventTap,
                     Quartz.kCGEventTapOptionDefault,
                     event_mask,
@@ -1029,7 +1031,7 @@ class TriggerController:
                     return event
 
                 self.mouse_tap = Quartz.CGEventTapCreate(
-                    Quartz.kCGHIDEventTap,
+                    EVENT_TAP_LOCATION,
                     Quartz.kCGHeadInsertEventTap,
                     Quartz.kCGEventTapOptionDefault,
                     event_mask,
@@ -1078,6 +1080,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.pending_alerts: List[str] = []
         self.pending_alerts_lock = threading.Lock()
         self.pending_reenable = False
+        self.permission_hint_shown = False
 
         self.engine = DictationEngine(self.core_config, self.on_engine_status)
         self.trigger = TriggerController(self.on_trigger)
@@ -1135,15 +1138,11 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.engine.toggle_recording()
 
     def enable_dictation(self) -> None:
+        permission_ok = ensure_listen_permission()
+        if not permission_ok:
+            logging.warning("enable_dictation: preflight permission check failed, continue to probe taps")
         try:
             logging.info("enable_dictation: mode=%s", self.ui_settings.trigger_mode)
-            if not ensure_listen_permission():
-                self.dictation_enabled = False
-                self.on_engine_status("ERROR")
-                ui_alert(
-                    "缺少权限：请在 系统设置 -> 隐私与安全性 中开启 Input Monitoring 和 Accessibility。"
-                )
-                return
             if self.ui_settings.trigger_mode == "mouse":
                 self.trigger.start_mouse(self.ui_settings.mouse_button)
             else:
@@ -1151,10 +1150,26 @@ class SenseVoiceMenuBarApp(rumps.App):
             self.dictation_enabled = True
             self.engine.warmup_async()
             self.on_engine_status("LOADING")
+            self.permission_hint_shown = False
         except Exception as exc:
             logging.exception("enable_dictation failed: %s", exc)
             self.dictation_enabled = False
             self.on_engine_status("ERROR")
+            if "Failed to create keyboard event tap" in str(exc):
+                ui_alert(
+                    "无法创建键盘监听（event tap）。这通常是启动器权限归属问题。\n"
+                    "请重新创建桌面启动器后再试：\n"
+                    "1) ./remove_launcher.sh\n"
+                    "2) ./create_launcher.sh\n"
+                    "3) 在系统设置中给 “SenseVoice Dictation.app” 重新勾选 Accessibility 和 Input Monitoring。\n"
+                    f"当前 Python: {sys.executable}"
+                )
+            if not permission_ok and not self.permission_hint_shown:
+                self.permission_hint_shown = True
+                ui_alert(
+                    "监听权限可能未生效。请在 系统设置 -> 隐私与安全性 -> Input Monitoring / Accessibility 中"
+                    "确认已勾选当前启动器，并重启应用。"
+                )
 
     def disable_dictation(self) -> None:
         self.dictation_enabled = False
@@ -1212,11 +1227,6 @@ class SenseVoiceMenuBarApp(rumps.App):
     @rumps.clicked("Use Keyboard Trigger")
     def on_use_keyboard(self, _):
         logging.info("on_use_keyboard clicked")
-        if not ensure_listen_permission():
-            ui_alert(
-                "无法切换到键盘触发：系统未授予 Input Monitoring / Accessibility 权限。"
-            )
-            return
         self.ui_settings.trigger_mode = "keyboard"
         save_ui_settings(self.ui_settings)
         self.refresh_ui_labels()

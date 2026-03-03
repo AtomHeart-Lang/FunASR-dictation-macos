@@ -52,10 +52,13 @@
 
 ## 6. 启动器图标
 
-创建：
+创建：  
 ```bash
 ./create_launcher.sh
 ```
+
+说明：桌面图标是 `~/Applications/SenseVoice Dictation.app` 的符号链接，避免系统权限列表出现重复条目。
+桌面启动器通过 Terminal 链路拉起，键盘监听权限更稳定。
 
 删除：
 ```bash

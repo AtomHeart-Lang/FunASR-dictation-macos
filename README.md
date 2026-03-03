@@ -13,7 +13,7 @@ A menubar dictation app for macOS:
 - Manual trigger configuration
 - Model update from menu (`Update Model`)
 - Autostart via LaunchAgent
-- Clickable launcher app (Applications + Desktop)
+- Clickable launcher app (Applications + Desktop symlink)
 - One-command uninstall and cleanup
 
 ## Requirements
@@ -36,7 +36,7 @@ Default installer actions:
 2. Install Python dependencies from `requirements.txt`
 3. Create `config.toml` from `config.example.toml` if missing
 4. Pre-download SenseVoice + VAD models
-5. Create launcher app in `~/Applications` and Desktop
+5. Create launcher app in `~/Applications` and Desktop (Desktop is a symlink)
 
 Installer options:
 - `--no-model`
@@ -75,10 +75,11 @@ Installer options:
 ### Core scripts
 
 - `install.sh`: install environment/dependencies and optional setup steps
-- `start_app.sh`: start menubar app (single-instance guarded)
+- `start_app.sh`: start menubar app
 - `enable_autostart.sh`: enable LaunchAgent autostart
 - `disable_autostart.sh`: disable LaunchAgent autostart
 - `create_launcher.sh`: create clickable `.app` launcher
+- `launch_from_desktop.sh`: desktop launcher entry (Terminal-based startup path)
 - `remove_launcher.sh`: remove clickable launcher
 - `uninstall.sh`: uninstall and cleanup runtime/model/env
 - `prepare_release.sh`: clean artifacts and produce release zip
@@ -166,6 +167,10 @@ Grant permissions to the terminal/launcher process:
 - Microphone
 - Accessibility
 - Input Monitoring
+
+Launcher note:
+- Desktop launcher starts through Terminal path for stable keyboard event-tap permission behavior.
+- Keep Terminal granted in Accessibility and Input Monitoring.
 
 ## GitHub Sharing
 

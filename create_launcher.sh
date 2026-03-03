@@ -49,7 +49,7 @@ LAUNCH_SRC="$TMP_DIR/launcher_main.c"
 cat > "$LAUNCH_SRC" <<SRC
 #include <stdlib.h>
 int main(void) {
-    return system("cd '$APP_DIR' && nohup ./start_app.sh >'$APP_DIR/menubar_runtime.log' 2>&1 &");
+    return system("cd '$APP_DIR' && ./launch_from_desktop.sh >/dev/null 2>&1");
 }
 SRC
 clang "$LAUNCH_SRC" -O2 -o "$APP_BUNDLE/Contents/MacOS/SenseVoiceLauncher"
@@ -73,7 +73,7 @@ if [[ -f "$ICON_PNG" ]]; then
 fi
 
 codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null 2>&1 || true
-cp -R "$APP_BUNDLE" "$DESKTOP_APP"
+ln -s "$APP_BUNDLE" "$DESKTOP_APP"
 
 echo "[OK] Launcher app created: $APP_BUNDLE"
-echo "[OK] Desktop shortcut created: $DESKTOP_APP"
+echo "[OK] Desktop shortcut created (symlink): $DESKTOP_APP"

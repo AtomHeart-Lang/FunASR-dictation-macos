@@ -26,6 +26,10 @@ MODEL_DIRS=(
 
 APP_BUNDLE="$HOME/Applications/SenseVoice Dictation.app"
 DESKTOP_APP="$HOME/Desktop/SenseVoice Dictation.app"
+TCC_IDS=(
+  "com.lee.sensevoice.dictation.launcher"
+  "com.lee.sensevoice.menubar"
+)
 
 
 echo "[Step] Disable launch agents"
@@ -61,6 +65,13 @@ rm -f "$APP_DIR"/*.lock
 rm -f "$APP_DIR/ui_settings.json"
 rm -f "$APP_DIR/config.toml"
 rm -f /tmp/sensevoice_menubar.log /tmp/sensevoice_menubar_debug.log
+
+echo "[Step] Reset TCC permissions (best effort)"
+for id in "${TCC_IDS[@]}"; do
+  tccutil reset All "$id" >/dev/null 2>&1 || true
+  tccutil reset Accessibility "$id" >/dev/null 2>&1 || true
+  tccutil reset ListenEvent "$id" >/dev/null 2>&1 || true
+done
 
 if [[ "$DELETE_DIR" -eq 1 ]]; then
   echo "[Step] Remove project directory"
