@@ -297,6 +297,7 @@ batch_size_s = 0
 
 说明：
 - 首次授权时请务必双击 `~/Applications/FunASR Dictation.app`（或桌面快捷方式）启动，不要用 `./start_app.sh`。
+- 启动器会在首次启动时主动请求麦克风/辅助功能/输入监控权限（应看到系统权限弹窗）。
 - 若终端启动可用但启动器不可用，请重建启动器并重新核对权限。
 - 桌面快捷方式指向 `~/Applications` 同一个应用，避免 TCC 列表重复。
 - 如果首次安装后 `open -a "FunASR Dictation"` 提示找不到应用，请先执行：

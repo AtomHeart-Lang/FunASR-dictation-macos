@@ -49,15 +49,20 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
   <string>app</string>
   <key>LSMinimumSystemVersion</key>
   <string>11.0</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>FunASR Dictation needs microphone access to transcribe your speech locally.</string>
 </dict>
 </plist>
 PLIST
 
-LAUNCH_SRC="$TMP_DIR/launcher_main.c"
+LAUNCH_SRC="$TMP_DIR/launcher_main.m"
 cat > "$LAUNCH_SRC" <<SRC
 #include <stdlib.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreFoundation/CoreFoundation.h>
+#import <Foundation/Foundation.h>
+#import <AVFoundation/AVFoundation.h>
+#include <dispatch/dispatch.h>
 
 static void request_tcc_permissions(void) {
     // Input Monitoring prompt (ListenEvent).
@@ -77,6 +82,23 @@ static void request_tcc_permissions(void) {
         AXIsProcessTrustedWithOptions(options);
         CFRelease(options);
     }
+
+    // Microphone prompt.
+    @autoreleasepool {
+        AVAuthorizationStatus status = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];
+        if (status == AVAuthorizationStatusNotDetermined) {
+            dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+            [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio
+                                     completionHandler:^(BOOL granted) {
+                                         (void)granted;
+                                         dispatch_semaphore_signal(sema);
+                                     }];
+            // Wait for user's first response once so permission state is settled
+            // before Python audio stream starts.
+            dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(120 * NSEC_PER_SEC));
+            dispatch_semaphore_wait(sema, timeout);
+        }
+    }
 }
 
 int main(void) {
@@ -85,8 +107,12 @@ int main(void) {
 }
 SRC
 clang "$LAUNCH_SRC" -O2 \
+  -fobjc-arc \
+  -fblocks \
   -framework ApplicationServices \
   -framework CoreFoundation \
+  -framework Foundation \
+  -framework AVFoundation \
   -o "$APP_BUNDLE/Contents/MacOS/FunASRLauncher"
 
 ICON_SRC="$APP_ICON_PNG"

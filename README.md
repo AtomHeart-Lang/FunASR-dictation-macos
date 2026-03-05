@@ -297,6 +297,7 @@ Grant permissions to the actual running process chain:
 
 Notes:
 - For first-time permission enrollment, launch by double-clicking `~/Applications/FunASR Dictation.app` (or the Desktop shortcut), not `./start_app.sh`.
+- Launcher now requests Microphone/Accessibility/Input-Monitoring at app startup (you should see system permission prompts on first run).
 - If launch from Terminal works but launcher fails, re-create launcher and re-check permissions.
 - Desktop shortcut points to the same app in `~/Applications` to avoid duplicate TCC rows.
 - If `open -a "FunASR Dictation"` cannot find the app on first install, run:
