@@ -1,14 +1,14 @@
 # SenseVoice Dictation for macOS
 
-SenseVoice Dictation is a macOS menubar app for push-to-talk dictation, built on [SenseVoice](https://github.com/FunAudioLLM/SenseVoice):
+SenseVoice Dictation is a macOS menubar app for push-to-talk dictation, now running on [Fun-ASR-Nano-2512](https://github.com/FunAudioLLM/Fun-ASR):
 - press the trigger once to start recording
 - press again to stop
-- transcribe with SenseVoice
+- transcribe with Fun-ASR-Nano-2512
 - auto-paste into the active text box
 
 Compared with built-in dictation or many generic tools, this app focuses on:
 - Local inference on your Mac (lower latency and no mandatory cloud round-trip)
-- Newer open model foundation (SenseVoice) with practical updates via `Update Model`
+- Newer open model foundation (Fun-ASR) with practical updates via `Update Model`
 - Strong mixed Chinese/English recognition quality in real typing workflows
 - End-to-end automation for global hotkey trigger and auto-paste into any text field
 
@@ -44,7 +44,7 @@ Default installer behavior:
 1. create `.venv`
 2. install Python dependencies (`requirements.txt`)
 3. create `config.toml` from `config.example.toml` if missing
-4. pre-download SenseVoice + VAD models
+4. pre-download Fun-ASR-Nano-2512 + VAD models
 5. create launcher app in `~/Applications` and Desktop shortcut symlink
 6. if Python 3.11+ is missing, auto-install Python via Homebrew (when `brew` is available)
 
@@ -61,16 +61,17 @@ Installer options:
 
 Or run from desktop/application icon after `./create_launcher.sh`.
 
-## SenseVoice Tuning
+## Fun-ASR Tuning
 
 Use menu `Model Config` to edit and save runtime parameters directly in UI.
 
 The UI writes values into `config.toml` for persistence. Manual file editing is optional.
 
-- `language`: `auto|zh|en|yue|ja|ko|nospeech` (for Chinese accuracy, prefer `zh`)
+- `language`: `auto|zh|en|ja` (for mixed Chinese/English dictation, keep `auto`)
 - `use_itn`: enable text normalization for numbers/date formatting
-- `batch_size_s`: inference batch seconds (default `9`)
+- `batch_size_s`: inference batch seconds (default `8`)
 - `merge_vad`: merge VAD segments (default `false`)
+- `hotwords`: optional comma-separated domain terms (e.g. `OpenAI, GitHub, batch_size_s`)
 - `remove_emoji`: remove emoji symbols from final pasted text (default `true`)
 
 Default recommended preset in this release:
@@ -80,8 +81,9 @@ Default recommended preset in this release:
 - `paste_delay_ms = 20`
 - `enable_beep = true`
 - `use_itn = true`
-- `batch_size_s = 9`
+- `batch_size_s = 8`
 - `merge_vad = false`
+- `hotwords = ""`
 - `remove_emoji = true`
 
 You can also edit these at runtime from menu `Model Config` (no manual file editing required).
@@ -92,6 +94,7 @@ Model Config fields in UI:
 - `channels`
 - `paste_delay_ms`
 - `batch_size_s`
+- `hotwords`
 - `enable_beep`
 - `use_itn`
 - `merge_vad`
@@ -106,7 +109,7 @@ Model Config fields in UI:
 
 Practical presets:
 - Accuracy-first dictation: `batch_size_s = 6`
-- Balanced default: `batch_size_s = 9`
+- Balanced default: `batch_size_s = 8`
 - Long-form speed-first: `batch_size_s = 12`
 
 ### `merge_vad` (segment strategy)
@@ -128,9 +131,10 @@ Optional (advanced): edit `config.toml` manually, for example:
 
 ```toml
 language = "zh"
-batch_size_s = 9
+batch_size_s = 8
 merge_vad = false
 use_itn = true
+hotwords = "OpenAI, GitHub, batch_size_s"
 remove_emoji = true
 ```
 
@@ -214,7 +218,7 @@ This file survives app restarts and macOS reboots.
 `./uninstall.sh` removes:
 - launch agents
 - running app processes
-- SenseVoice model cache
+- Fun-ASR-Nano-2512 model cache (and legacy SenseVoice cache if present)
 - `.venv`
 - local logs/locks/runtime config
 - `~/Library/Application Support/SenseVoiceDictation/ui_settings.json` and related config residues

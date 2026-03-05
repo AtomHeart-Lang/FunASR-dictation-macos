@@ -56,9 +56,10 @@ LEGACY_UI_SETTINGS_PATH = APP_DIR / "ui_settings.json"
 UI_SETTINGS_PATH = APP_SUPPORT_DIR / "ui_settings.json"
 LOG_PATH = APP_DIR / "menubar_debug.log"
 LOCK_PATH = APP_DIR / "menubar_app.lock"
-MODEL_NAME = "iic/SenseVoiceSmall"
+MODEL_NAME = "FunAudioLLM/Fun-ASR-Nano-2512"
+VAD_MODEL_NAME = "iic/speech_fsmn_vad_zh-cn-16k-common-pytorch"
 APP_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
-APP_BUILD = "2026-03-03-b13"
+APP_BUILD = "2026-03-05-b14"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 EMOJI_RE = re.compile(
@@ -84,6 +85,7 @@ AUTOSTART_RUNNER_VERSION = "2"
 ENABLE_AUTOSTART_SCRIPT = APP_DIR / "enable_autostart.sh"
 DISABLE_AUTOSTART_SCRIPT = APP_DIR / "disable_autostart.sh"
 MODEL_CACHE_DIRS = [
+    Path.home() / ".cache/modelscope/hub/models/FunAudioLLM/Fun-ASR-Nano-2512",
     Path.home() / ".cache/modelscope/hub/models/iic/SenseVoiceSmall",
     Path.home() / ".cache/modelscope/hub/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
 ]
@@ -146,8 +148,8 @@ I18N = {
         "en": "Edit and save runtime parameters directly",
     },
     "model_config_hint": {
-        "zh": "默认推荐：use_itn=true，batch_size_s=9，merge_vad=false，paste_delay_ms=20。",
-        "en": "Default recommendation: use_itn=true, batch_size_s=9, merge_vad=false, paste_delay_ms=20.",
+        "zh": "默认推荐：language=auto，use_itn=true，batch_size_s=8，merge_vad=false；专有词可写入 hotwords。",
+        "en": "Recommended: language=auto, use_itn=true, batch_size_s=8, merge_vad=false; put domain words in hotwords.",
     },
     "manual_hotkey_prompt": {
         "zh": "手动输入快捷键（例如 <ctrl>+<alt>+<space> 或 f8）",
@@ -240,6 +242,22 @@ def tr(key: str, **kwargs) -> str:
 
 def localized_status(status: str) -> str:
     return tr(f"status_{status.lower()}")
+
+
+FUNASR_LANGUAGE_MAP = {
+    "zh": "中文",
+    "en": "英文",
+    "ja": "日文",
+    "yue": "粤语",
+    "ko": "韩文",
+}
+
+
+def resolve_funasr_language(value: str) -> Optional[str]:
+    raw = (value or "").strip().lower()
+    if raw in {"", "auto", "nospeech"}:
+        return None
+    return FUNASR_LANGUAGE_MAP.get(raw, raw)
 
 
 def _applescript_escape(text: str) -> str:
@@ -483,9 +501,10 @@ class CoreConfig:
     paste_delay_ms: int = 20
     enable_beep: bool = True
     use_itn: bool = True
-    batch_size_s: int = 9
+    batch_size_s: int = 8
     merge_vad: bool = False
     remove_emoji: bool = True
+    hotwords: str = ""
 
 
 @dataclass
@@ -509,9 +528,10 @@ def load_core_config() -> CoreConfig:
         paste_delay_ms=int(data.get("paste_delay_ms", 20)),
         enable_beep=bool(data.get("enable_beep", True)),
         use_itn=bool(data.get("use_itn", True)),
-        batch_size_s=int(data.get("batch_size_s", 9)),
+        batch_size_s=int(data.get("batch_size_s", 8)),
         merge_vad=bool(data.get("merge_vad", False)),
         remove_emoji=bool(data.get("remove_emoji", True)),
+        hotwords=str(data.get("hotwords", "")),
     )
 
 
@@ -536,8 +556,8 @@ def save_core_config(config: CoreConfig) -> None:
         "#   <cmd>+<shift>+v\n"
         "#   <ctrl>+<option>+r\n"
         f'hotkey = "{hotkey}"\n\n'
-        "# SenseVoice language: auto, zh, en, yue, ja, ko, nospeech\n"
-        '# For better Chinese accuracy, prefer "zh" instead of "auto".\n'
+        "# Fun-ASR language: auto, zh, en, ja\n"
+        "# For mixed zh/en dictation, keep auto.\n"
         f'language = "{language}"\n\n'
         "# Audio configuration\n"
         f"sample_rate = {int(config.sample_rate)}\n"
@@ -546,7 +566,7 @@ def save_core_config(config: CoreConfig) -> None:
         f"paste_delay_ms = {int(config.paste_delay_ms)}\n\n"
         "# Enable system sound when start/stop recording\n"
         f"enable_beep = {b(bool(config.enable_beep))}\n\n"
-        "# SenseVoice inference options\n"
+        "# Fun-ASR inference options\n"
         "# ITN: normalize numbers/date etc., may improve readability in some cases.\n"
         f"use_itn = {b(bool(config.use_itn))}\n"
         "# seconds per decode batch; higher=faster, lower=usually better segmentation stability.\n"
@@ -554,6 +574,8 @@ def save_core_config(config: CoreConfig) -> None:
         f"batch_size_s = {int(config.batch_size_s)}\n"
         "# false=keep VAD segments, true=merge segments for potentially faster decoding.\n"
         f"merge_vad = {b(bool(config.merge_vad))}\n\n"
+        '# Optional comma-separated domain terms, e.g. "OpenAI, GitHub, batch_size_s"\n'
+        f'hotwords = "{config.hotwords.replace(chr(34), "").strip()}"\n\n'
         "# Remove emoji symbols from final pasted text.\n"
         f"remove_emoji = {b(bool(config.remove_emoji))}\n"
     )
@@ -577,6 +599,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         "channels": str(current.channels),
         "paste_delay_ms": str(current.paste_delay_ms),
         "batch_size_s": str(current.batch_size_s),
+        "hotwords": current.hotwords,
         "enable_beep": bool(current.enable_beep),
         "use_itn": bool(current.use_itn),
         "merge_vad": bool(current.merge_vad),
@@ -596,7 +619,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         alert.addButtonWithTitle_(tr("save"))
         alert.addButtonWithTitle_(tr("cancel"))
 
-        panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 430, 310))
+        panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 430, 340))
 
         def make_label(y: float, text: str):
             label = NSTextField.alloc().initWithFrame_(NSMakeRect(10, y, 130, 22))
@@ -622,16 +645,18 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
             panel.addSubview_(box)
             return box
 
-        make_label(270, "language")
-        language_field = make_input(268, state["language"])
-        make_label(238, "sample_rate")
-        sample_rate_field = make_input(236, state["sample_rate"])
-        make_label(206, "channels")
-        channels_field = make_input(204, state["channels"])
-        make_label(174, "paste_delay_ms")
-        paste_delay_field = make_input(172, state["paste_delay_ms"])
-        make_label(142, "batch_size_s")
-        batch_size_field = make_input(140, state["batch_size_s"])
+        make_label(300, "language")
+        language_field = make_input(298, state["language"])
+        make_label(268, "sample_rate")
+        sample_rate_field = make_input(266, state["sample_rate"])
+        make_label(236, "channels")
+        channels_field = make_input(234, state["channels"])
+        make_label(204, "paste_delay_ms")
+        paste_delay_field = make_input(202, state["paste_delay_ms"])
+        make_label(172, "batch_size_s")
+        batch_size_field = make_input(170, state["batch_size_s"])
+        make_label(140, "hotwords")
+        hotwords_field = make_input(138, state["hotwords"])
 
         enable_beep_box = make_check(108, "enable_beep", state["enable_beep"])
         use_itn_box = make_check(84, "use_itn", state["use_itn"])
@@ -657,6 +682,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         state["channels"] = channels_field.stringValue().strip()
         state["paste_delay_ms"] = paste_delay_field.stringValue().strip()
         state["batch_size_s"] = batch_size_field.stringValue().strip()
+        state["hotwords"] = hotwords_field.stringValue().strip()
         state["enable_beep"] = bool(enable_beep_box.state() == NSControlStateValueOn)
         state["use_itn"] = bool(use_itn_box.state() == NSControlStateValueOn)
         state["merge_vad"] = bool(merge_vad_box.state() == NSControlStateValueOn)
@@ -675,6 +701,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
                 batch_size_s=parse_int(state["batch_size_s"], "batch_size_s", 1, 60),
                 merge_vad=state["merge_vad"],
                 remove_emoji=state["remove_emoji"],
+                hotwords=state["hotwords"],
             )
         except Exception as exc:
             logging.warning("ui_edit_model_config invalid: %s", exc)
@@ -1500,14 +1527,25 @@ class DictationEngine:
     def _load_model_worker(self) -> None:
         self._set_status("LOADING")
         try:
-            model = AutoModel(
-                model=MODEL_NAME,
-                trust_remote_code=False,
-                vad_model="fsmn-vad",
-                vad_kwargs={"max_single_segment_time": 30000},
-                device="cpu",
-                disable_update=True,
-            )
+            try:
+                model = AutoModel(
+                    model=MODEL_NAME,
+                    trust_remote_code=True,
+                    remote_code="./model.py",
+                    vad_model=VAD_MODEL_NAME,
+                    vad_kwargs={"max_single_segment_time": 30000},
+                    device="cpu",
+                    disable_update=True,
+                )
+            except Exception:
+                model = AutoModel(
+                    model=MODEL_NAME,
+                    trust_remote_code=False,
+                    vad_model=VAD_MODEL_NAME,
+                    vad_kwargs={"max_single_segment_time": 30000},
+                    device="cpu",
+                    disable_update=True,
+                )
             with self.lock:
                 self.model = model
         except Exception:
@@ -1645,15 +1683,29 @@ class DictationEngine:
         transcribe_start = time.monotonic()
         try:
             pcm = self._trim_silence(audio, self.config.sample_rate)
-            result = self.model.generate(
-                input=pcm,
-                cache={},
-                language=self.config.language,
-                use_itn=self.config.use_itn,
-                batch_size_s=self.config.batch_size_s,
-                merge_vad=self.config.merge_vad,
-                fs=self.config.sample_rate,
-            )
+            lang = resolve_funasr_language(self.config.language)
+            gen_kwargs = {
+                "input": pcm,
+                "cache": {},
+                "batch_size_s": self.config.batch_size_s,
+                "merge_vad": self.config.merge_vad,
+                "fs": self.config.sample_rate,
+                "itn": self.config.use_itn,
+            }
+            if lang is not None:
+                gen_kwargs["language"] = lang
+            hotwords = (self.config.hotwords or "").strip()
+            if hotwords:
+                gen_kwargs["hotwords"] = hotwords
+
+            try:
+                result = self.model.generate(**gen_kwargs)
+            except TypeError:
+                # Backward compatibility for older runtime signatures.
+                if "itn" in gen_kwargs:
+                    gen_kwargs["use_itn"] = gen_kwargs.pop("itn")
+                gen_kwargs.pop("hotwords", None)
+                result = self.model.generate(**gen_kwargs)
             raw_text = result[0].get("text", "") if result else ""
             text = rich_transcription_postprocess(raw_text)
             text = self._cleanup_text(text, self.config.remove_emoji)
@@ -2229,7 +2281,7 @@ class SenseVoiceMenuBarApp(rumps.App):
             self.core_config = load_core_config()
             self.engine.config = self.core_config
             logging.info(
-                "on_model_config: saved language=%s sample_rate=%s channels=%s use_itn=%s batch_size_s=%s merge_vad=%s remove_emoji=%s",
+                "on_model_config: saved language=%s sample_rate=%s channels=%s use_itn=%s batch_size_s=%s merge_vad=%s remove_emoji=%s hotwords_len=%s",
                 self.core_config.language,
                 self.core_config.sample_rate,
                 self.core_config.channels,
@@ -2237,6 +2289,7 @@ class SenseVoiceMenuBarApp(rumps.App):
                 self.core_config.batch_size_s,
                 self.core_config.merge_vad,
                 self.core_config.remove_emoji,
+                len((self.core_config.hotwords or "").strip()),
             )
             logging.info("on_model_config: saved in %.3fs", time.monotonic() - started)
             ui_alert_native(tr("model_config_saved"), title=tr("menu_model_config"))

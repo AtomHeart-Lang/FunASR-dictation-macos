@@ -27,6 +27,7 @@ PLISTS=(
   "$HOME/Library/LaunchAgents/com.lee.sensevoice.menubar.plist"
 )
 MODEL_DIRS=(
+  "$HOME/.cache/modelscope/hub/models/FunAudioLLM/Fun-ASR-Nano-2512"
   "$HOME/.cache/modelscope/hub/models/iic/SenseVoiceSmall"
   "$HOME/.cache/modelscope/hub/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch"
 )

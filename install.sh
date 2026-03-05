@@ -104,18 +104,29 @@ if [[ ! -f config.toml ]]; then
 fi
 
 if [[ "$WITH_MODEL" -eq 1 ]]; then
-  echo "[Step] Downloading/refreshing SenseVoice model cache"
-  python - <<'PY'
+  echo "[Step] Downloading/refreshing Fun-ASR-Nano-2512 model cache"
+python - <<'PY'
 from funasr import AutoModel
 
-model = AutoModel(
-    model="iic/SenseVoiceSmall",
-    trust_remote_code=False,
-    vad_model="fsmn-vad",
-    vad_kwargs={"max_single_segment_time": 30000},
-    device="cpu",
-    disable_update=True,
-)
+try:
+    model = AutoModel(
+        model="FunAudioLLM/Fun-ASR-Nano-2512",
+        trust_remote_code=True,
+        remote_code="./model.py",
+        vad_model="iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+        vad_kwargs={"max_single_segment_time": 30000},
+        device="cpu",
+        disable_update=True,
+    )
+except Exception:
+    model = AutoModel(
+        model="FunAudioLLM/Fun-ASR-Nano-2512",
+        trust_remote_code=False,
+        vad_model="iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+        vad_kwargs={"max_single_segment_time": 30000},
+        device="cpu",
+        disable_update=True,
+    )
 print('[OK] Model is ready')
 PY
 fi
