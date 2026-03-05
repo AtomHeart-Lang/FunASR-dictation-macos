@@ -2511,18 +2511,44 @@ class SenseVoiceMenuBarApp(rumps.App):
             nsstatusitem = getattr(nsapp, "nsstatusitem", None)
             if nsstatusitem is None:
                 return
+            try:
+                nsstatusitem.setVisible_(True)
+            except Exception:
+                pass
             nsstatusitem.setLength_(-1)
             nsstatusitem.setTitle_(self.title or "FA○")
+            try:
+                nsstatusitem.setHighlightMode_(True)
+            except Exception:
+                pass
             if nsstatusitem.image() is None:
                 icon = self._menu_icon_image()
                 if icon is not None:
                     nsstatusitem.setImage_(icon)
+            # Some macOS versions only render updates reliably via status button.
+            try:
+                button = nsstatusitem.button()
+            except Exception:
+                button = None
+            if button is not None:
+                button.setTitle_(self.title or "FA○")
+                if button.image() is None:
+                    icon = self._menu_icon_image()
+                    if icon is not None:
+                        button.setImage_(icon)
             if not self._status_item_ready_logged:
                 self._status_item_ready_logged = True
+                hidden = None
+                try:
+                    app = NSApplication.sharedApplication()
+                    hidden = bool(app.isHidden())
+                except Exception:
+                    hidden = None
                 logging.info(
-                    "status item active: has_title=%s has_image=%s",
+                    "status item active: has_title=%s has_image=%s app_hidden=%s",
                     bool(nsstatusitem.title()),
                     nsstatusitem.image() is not None,
+                    hidden,
                 )
         except Exception as exc:
             if not self._status_item_enforce_warned:

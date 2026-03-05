@@ -93,16 +93,10 @@ static void request_tcc_permissions(void) {
     @autoreleasepool {
         AVAuthorizationStatus status = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];
         if (status == AVAuthorizationStatusNotDetermined) {
-            dispatch_semaphore_t sema = dispatch_semaphore_create(0);
             [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio
                                      completionHandler:^(BOOL granted) {
                                          (void)granted;
-                                         dispatch_semaphore_signal(sema);
                                      }];
-            // Wait for user's first response once so permission state is settled
-            // before Python audio stream starts.
-            dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(120 * NSEC_PER_SEC));
-            dispatch_semaphore_wait(sema, timeout);
         }
     }
 }
@@ -119,11 +113,19 @@ int main(void) {
         );
         return 2;
     }
-    // Use exec (same process identity), and invoke script via bash so startup
-    // does not depend on executable bit persistence after unzip/copy.
-    execl("/bin/bash", "bash", "./launch_from_desktop.sh", (char *)NULL);
+    // Launch worker in child process, keep launcher lifecycle short so
+    // LaunchServices can always re-open app reliably (avoid open -600).
+    pid_t pid = fork();
+    if (pid == 0) {
+        setsid();
+        execl("/bin/bash", "bash", "./launch_from_desktop.sh", (char *)NULL);
+        _exit(127);
+    }
+    if (pid > 0) {
+        return 0;
+    }
     char buf[512];
-    snprintf(buf, sizeof(buf), "display dialog \"FunASR Dictation failed to start (exec error %d).\" buttons {\"OK\"} default button \"OK\"", errno);
+    snprintf(buf, sizeof(buf), "display dialog \"FunASR Dictation failed to start (fork error %d).\" buttons {\"OK\"} default button \"OK\"", errno);
     execl("/usr/bin/osascript", "osascript", "-e", buf, (char *)NULL);
     return 3;
 }
