@@ -311,8 +311,8 @@ I18N = {
         "en": "Failed to create keyboard event tap. This is usually a permission-attribution issue.\nPlease retry with:\n1) ./remove_launcher.sh\n2) ./create_launcher.sh\n3) Launch once by double-clicking FunASR Dictation.app (not Terminal)\n4) Re-enable Accessibility and Input Monitoring for \"FunASR Dictation\" in System Settings.\nCurrent Python: {python}",
     },
     "permission_hint": {
-        "zh": "监听权限可能未生效。请从桌面或 Applications 双击 FunASR Dictation.app 启动，并在 系统设置 -> 隐私与安全性 -> Input Monitoring / Accessibility 中勾选对应条目后重启应用。",
-        "en": "Input-monitoring permissions may not be effective. Launch from FunASR Dictation.app (Desktop/Applications), then enable its entries in System Settings -> Privacy & Security -> Input Monitoring / Accessibility, and restart.",
+        "zh": "监听权限可能未生效。请从桌面或 Applications 双击 FunASR Dictation.app 启动，并在 系统设置 -> 隐私与安全性 -> 输入监控 / 辅助功能 中勾选对应条目后重启应用。若列表里没有 FunASR Dictation，请同时检查并放行 Python。",
+        "en": "Input-monitoring permissions may not be effective. Launch from FunASR Dictation.app (Desktop/Applications), then enable entries under System Settings -> Privacy & Security -> Input Monitoring / Accessibility and restart. If FunASR Dictation is not listed, also allow Python.",
     },
     "silent_audio_hint": {
         "zh": "检测到录音为静音（音量全为 0）。请检查：\n1) 系统设置 -> 隐私与安全性 -> 麦克风，是否允许 FunASR Dictation / Python\n2) 系统设置 -> 声音 -> 输入，是否选中了正确麦克风\n3) 麦克风本身是否被静音或被其他软件占用",
@@ -1192,16 +1192,16 @@ def mods_from_flags(flags: int) -> List[str]:
     return mods
 
 
-def ensure_listen_permission() -> bool:
+def ensure_listen_permission(request_prompt: bool = False) -> bool:
     ok = bool(Quartz.CGPreflightListenEventAccess())
     if ok:
         return True
 
-    # Try to trigger system prompt once.
-    try:
-        Quartz.CGRequestListenEventAccess()
-    except Exception:
-        pass
+    if request_prompt:
+        try:
+            Quartz.CGRequestListenEventAccess()
+        except Exception:
+            pass
 
     ok = bool(Quartz.CGPreflightListenEventAccess())
     if not ok:
@@ -2436,6 +2436,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.pending_reenable = False
         self.pending_startup_enable = False
         self.permission_hint_shown = False
+        self.permission_error_alert_shown = False
         self.last_published_title = ""
         self._status_item_ready_logged = False
         self._status_item_enforce_warned = False
@@ -2574,18 +2575,18 @@ class SenseVoiceMenuBarApp(rumps.App):
     def _flush_pending_actions(self) -> None:
         if self.pending_reenable:
             self.pending_reenable = False
-            self.enable_dictation()
+            self.enable_dictation(show_alert=False, request_prompt=False)
         if self.pending_startup_enable:
             self.pending_startup_enable = False
-            self.enable_dictation()
+            self.enable_dictation(show_alert=False, request_prompt=False)
 
     def on_trigger(self) -> None:
         if not self.dictation_enabled or self.updating_model:
             return
         self.engine.toggle_recording()
 
-    def enable_dictation(self) -> None:
-        permission_ok = ensure_listen_permission()
+    def enable_dictation(self, *, show_alert: bool = True, request_prompt: bool = True) -> None:
+        permission_ok = ensure_listen_permission(request_prompt=request_prompt)
         if not permission_ok:
             logging.warning("enable_dictation: preflight permission check failed, continue to probe taps")
         try:
@@ -2598,16 +2599,22 @@ class SenseVoiceMenuBarApp(rumps.App):
             self.engine.warmup_async()
             self.on_engine_status("LOADING")
             self.permission_hint_shown = False
+            self.permission_error_alert_shown = False
         except Exception as exc:
             logging.exception("enable_dictation failed: %s", exc)
             self.dictation_enabled = False
             self.on_engine_status("ERROR")
-            if "Failed to create keyboard event tap" in str(exc):
+            if (
+                show_alert
+                and "Failed to create keyboard event tap" in str(exc)
+                and not self.permission_error_alert_shown
+            ):
+                self.permission_error_alert_shown = True
                 ui_alert_native(
                     tr("permission_event_tap_failed", python=sys.executable),
                     title=tr("app_name"),
                 )
-            if not permission_ok and not self.permission_hint_shown:
+            if show_alert and not permission_ok and not self.permission_hint_shown:
                 self.permission_hint_shown = True
                 ui_alert_native(tr("permission_hint"), title=tr("app_name"))
 
@@ -2692,7 +2699,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         if self.dictation_enabled:
             self.disable_dictation()
         else:
-            self.enable_dictation()
+            self.enable_dictation(show_alert=True, request_prompt=True)
 
     def _set_trigger_mode(self, mode: str) -> None:
         self.ui_settings.trigger_mode = mode

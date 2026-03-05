@@ -64,45 +64,9 @@ cat > "$LAUNCH_SRC" <<SRC
 #include <unistd.h>
 #include <errno.h>
 #include <stdio.h>
-#include <ApplicationServices/ApplicationServices.h>
-#include <CoreFoundation/CoreFoundation.h>
 #import <Foundation/Foundation.h>
-#import <AVFoundation/AVFoundation.h>
-#include <dispatch/dispatch.h>
-
-static void request_tcc_permissions(void) {
-    // Input Monitoring prompt (ListenEvent).
-    CGRequestListenEventAccess();
-    // Accessibility prompt.
-    const void *keys[] = { kAXTrustedCheckOptionPrompt };
-    const void *vals[] = { kCFBooleanTrue };
-    CFDictionaryRef options = CFDictionaryCreate(
-        kCFAllocatorDefault,
-        keys,
-        vals,
-        1,
-        &kCFCopyStringDictionaryKeyCallBacks,
-        &kCFTypeDictionaryValueCallBacks
-    );
-    if (options != NULL) {
-        AXIsProcessTrustedWithOptions(options);
-        CFRelease(options);
-    }
-
-    // Microphone prompt.
-    @autoreleasepool {
-        AVAuthorizationStatus status = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];
-        if (status == AVAuthorizationStatusNotDetermined) {
-            [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio
-                                     completionHandler:^(BOOL granted) {
-                                         (void)granted;
-                                     }];
-        }
-    }
-}
 
 int main(void) {
-    request_tcc_permissions();
     if (chdir("$APP_DIR") != 0) {
         execl(
             "/usr/bin/osascript",
