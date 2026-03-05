@@ -2817,6 +2817,15 @@ class SenseVoiceMenuBarApp(rumps.App):
 
 
 def main() -> None:
+    if not acquire_single_instance():
+        logging.info("another instance exists, skip launch")
+        try:
+            ui_alert(tr("already_running_hint"), title=tr("app_name"))
+        except Exception:
+            pass
+        return
+    atexit.register(release_single_instance)
+
     # Keep the app in menu bar mode (hide Dock icon where possible).
     try:
         bundle = NSBundle.mainBundle()
@@ -2832,14 +2841,6 @@ def main() -> None:
     except Exception:
         pass
 
-    if not acquire_single_instance():
-        logging.info("another instance exists, skip launch")
-        try:
-            ui_notify(tr("already_running_hint"), title=tr("app_name"))
-        except Exception:
-            pass
-        return
-    atexit.register(release_single_instance)
     log_runtime_context()
 
     app = SenseVoiceMenuBarApp()
