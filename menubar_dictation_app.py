@@ -319,6 +319,10 @@ I18N = {
         "en": "Captured audio is fully silent (all zeros). Please check:\n1) System Settings -> Privacy & Security -> Microphone: allow FunASR Dictation / Python\n2) System Settings -> Sound -> Input: select the correct microphone\n3) The microphone is not muted or exclusively occupied by another app",
     },
     "launch_login_update_failed": {"zh": "更新开机自动启动失败: {error}", "en": "Failed to update Launch At Login: {error}"},
+    "already_running_hint": {
+        "zh": "FunASR Dictation 已在菜单栏运行。",
+        "en": "FunASR Dictation is already running in the menu bar.",
+    },
 }
 
 
@@ -662,6 +666,19 @@ def ui_alert(message: str, title: Optional[str] = None) -> None:
         f'display dialog "{_applescript_escape(message)}" '
         f'with title "{_applescript_escape(title or tr("app_name"))}" '
         f'buttons {{"OK"}} default button "OK"{icon_clause}'
+    )
+    subprocess.run(
+        ["osascript", "-e", script],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+def ui_notify(message: str, title: Optional[str] = None) -> None:
+    script = (
+        f'display notification "{_applescript_escape(message)}" '
+        f'with title "{_applescript_escape(title or tr("app_name"))}"'
     )
     subprocess.run(
         ["osascript", "-e", script],
@@ -2817,6 +2834,10 @@ def main() -> None:
 
     if not acquire_single_instance():
         logging.info("another instance exists, skip launch")
+        try:
+            ui_notify(tr("already_running_hint"), title=tr("app_name"))
+        except Exception:
+            pass
         return
     atexit.register(release_single_instance)
     log_runtime_context()
