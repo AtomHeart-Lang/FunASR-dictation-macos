@@ -1698,7 +1698,6 @@ class DictationEngine:
         self.processing = False
         self.shutdown_flag = False
         self.silent_audio_alerted = False
-        self.cached_input_device: Optional[int] = None
 
     def _set_status(self, status: str) -> None:
         self.status_cb(status)
@@ -1793,93 +1792,6 @@ class DictationEngine:
         self.warmup_async()
         return False
 
-    @staticmethod
-    def _is_virtual_input_name(name: str) -> bool:
-        n = name.lower()
-        markers = (
-            "blackhole",
-            "loopback",
-            "soundflower",
-            "aggregate",
-            "display audio",
-            "airplay",
-            "hdmi",
-            "vb-audio",
-        )
-        return any(m in n for m in markers)
-
-    @staticmethod
-    def _is_mic_like_name(name: str) -> bool:
-        n = name.lower()
-        markers = (
-            "microphone",
-            "mic",
-            "built-in",
-            "built in",
-            "麦克风",
-            "内建",
-        )
-        return any(m in n for m in markers)
-
-    def _resolve_input_device(self) -> Optional[int]:
-        try:
-            devs = sd.query_devices()
-        except Exception as exc:
-            logging.warning("query_devices failed: %s", exc)
-            return None
-
-        candidates = []
-        for idx, dev in enumerate(devs):
-            try:
-                in_ch = int(dev.get("max_input_channels", 0))
-            except Exception:
-                in_ch = 0
-            if in_ch <= 0:
-                continue
-            candidates.append((idx, dev))
-        if not candidates:
-            logging.warning("no input-capable device found by sounddevice")
-            return None
-
-        default_in = None
-        try:
-            default_dev = sd.default.device
-            if isinstance(default_dev, (list, tuple)) and len(default_dev) >= 1:
-                default_in = int(default_dev[0])
-            elif isinstance(default_dev, int):
-                default_in = int(default_dev)
-        except Exception:
-            default_in = None
-
-        def score(entry):
-            idx, dev = entry
-            name = str(dev.get("name", ""))
-            score_val = 0
-            if default_in is not None and idx == default_in:
-                score_val += 30
-            if self._is_mic_like_name(name):
-                score_val += 50
-            if self._is_virtual_input_name(name):
-                score_val -= 80
-            score_val += min(int(dev.get("max_input_channels", 0)), 2) * 5
-            return score_val
-
-        ranked = sorted(candidates, key=score, reverse=True)
-        picked_idx, picked_dev = ranked[0]
-        summary = []
-        for idx, dev in ranked[:5]:
-            summary.append(
-                f"{idx}:{dev.get('name','?')} in={int(dev.get('max_input_channels',0))} score={score((idx, dev))}"
-            )
-        logging.info(
-            "audio_input choose=%s name=%s default_in=%s candidates=%s",
-            picked_idx,
-            picked_dev.get("name", "?"),
-            default_in,
-            " | ".join(summary),
-        )
-        return int(picked_idx)
-
     def _audio_callback(self, indata, frames, time_info, status):
         if status:
             pass
@@ -1960,24 +1872,16 @@ class DictationEngine:
         self._set_status("RECORDING")
 
         try:
-            device_idx = self.cached_input_device
-            if device_idx is None:
-                device_idx = self._resolve_input_device()
-                self.cached_input_device = device_idx
-
-            stream_kwargs = dict(
+            logging.info("start_recording using system default input device: %s", sd.default.device)
+            self.stream = sd.InputStream(
                 samplerate=self.config.sample_rate,
                 channels=self.config.channels,
                 dtype="float32",
                 callback=self._audio_callback,
             )
-            if device_idx is not None:
-                stream_kwargs["device"] = device_idx
-            self.stream = sd.InputStream(**stream_kwargs)
             self.stream.start()
         except Exception as exc:
             logging.exception("start_recording stream open failed: %s", exc)
-            self.cached_input_device = None
             with self.lock:
                 self.recording = False
             self._set_status("ERROR")
@@ -2158,7 +2062,6 @@ class DictationEngine:
             self.model = None
             self.processing = False
             self.model_loading = False
-            self.cached_input_device = None
 
 
 class TriggerController:
