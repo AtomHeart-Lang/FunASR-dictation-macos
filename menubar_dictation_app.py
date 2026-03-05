@@ -42,8 +42,6 @@ from AppKit import (
     NSBackingStoreBuffered,
 )
 from Foundation import NSBundle, NSDate, NSLocale, NSRunLoop
-from funasr import AutoModel
-from funasr.utils.postprocess_utils import rich_transcription_postprocess
 from pynput import keyboard, mouse
 
 try:
@@ -68,6 +66,10 @@ APP_BUILD = "2026-03-05-b14"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 DEFAULT_NCPU = max(1, int(os.environ.get("SVD_NCPU", "2")))
+_FUNASR_IMPORT_LOCK = threading.Lock()
+_AUTOMODEL_CLS = None
+_POSTPROCESS_FN = None
+CJK_CHAR_CLASS = r"\u3400-\u4dbf\u4e00-\u9fff"
 EMOJI_RE = re.compile(
     "["
     "\U0001F300-\U0001F5FF"
@@ -103,6 +105,35 @@ logging.basicConfig(
     force=True,
 )
 logging.info("menubar app module loaded, python=%s", sys.executable)
+
+
+def ensure_funasr_modules_loaded() -> None:
+    global _AUTOMODEL_CLS, _POSTPROCESS_FN
+    if _AUTOMODEL_CLS is not None and _POSTPROCESS_FN is not None:
+        return
+    with _FUNASR_IMPORT_LOCK:
+        if _AUTOMODEL_CLS is not None and _POSTPROCESS_FN is not None:
+            return
+        import_start = time.monotonic()
+        from funasr import AutoModel as auto_model_cls  # local lazy import
+        from funasr.utils.postprocess_utils import (
+            rich_transcription_postprocess as postprocess_fn,  # local lazy import
+        )
+
+        _AUTOMODEL_CLS = auto_model_cls
+        _POSTPROCESS_FN = postprocess_fn
+        logging.info("funasr lazy import done in %.3fs", time.monotonic() - import_start)
+
+
+def maybe_postprocess_text(raw_text: str) -> str:
+    # Avoid unnecessary rich postprocess pass when there are no special markers.
+    if not raw_text:
+        return ""
+    if "<|" not in raw_text and "/sil" not in raw_text:
+        return raw_text
+    ensure_funasr_modules_loaded()
+    assert _POSTPROCESS_FN is not None
+    return _POSTPROCESS_FN(raw_text)
 
 
 def _detect_app_language() -> str:
@@ -1601,12 +1632,15 @@ class DictationEngine:
     def _load_model_worker(self) -> None:
         self._set_status("LOADING")
         try:
+            load_started = time.monotonic()
             if not FUNASR_REMOTE_CODE_PATH.exists():
                 raise RuntimeError(f"Fun-ASR runtime file missing: {FUNASR_REMOTE_CODE_PATH}")
             ensure_funasr_runtime_imports()
+            ensure_funasr_modules_loaded()
+            assert _AUTOMODEL_CLS is not None
             load_errors = []
             try:
-                model = AutoModel(
+                model = _AUTOMODEL_CLS(
                     model=MODEL_NAME,
                     trust_remote_code=True,
                     remote_code=str(FUNASR_REMOTE_CODE_PATH),
@@ -1619,7 +1653,7 @@ class DictationEngine:
                 )
             except Exception as exc:
                 load_errors.append(f"trust_remote_code=True: {exc!r}")
-                model = AutoModel(
+                model = _AUTOMODEL_CLS(
                     model=MODEL_NAME,
                     trust_remote_code=False,
                     vad_model=VAD_MODEL_NAME,
@@ -1631,7 +1665,11 @@ class DictationEngine:
                 )
             with self.lock:
                 self.model = model
-            logging.info("model runtime ncpu=%d", DEFAULT_NCPU)
+            logging.info(
+                "model runtime ncpu=%d load_elapsed=%.3fs",
+                DEFAULT_NCPU,
+                time.monotonic() - load_started,
+            )
             if load_errors:
                 logging.warning("model load fallback used: %s", " | ".join(load_errors))
         except Exception as exc:
@@ -1707,7 +1745,16 @@ class DictationEngine:
     def _cleanup_text(text: str, remove_emoji: bool) -> str:
         if remove_emoji:
             text = EMOJI_RE.sub("", text)
+        text = text.replace("\u3000", " ")
         text = re.sub(r"\s+", " ", text)
+        # Remove unwanted spacing between Chinese characters.
+        text = re.sub(rf"(?<=[{CJK_CHAR_CLASS}])\s+(?=[{CJK_CHAR_CLASS}])", "", text)
+        # Remove spaces before punctuation.
+        text = re.sub(r"\s+([,.;:!?，。！？；：、])", r"\1", text)
+        # Remove spaces just inside paired brackets/quotes.
+        text = re.sub(r"([（(【\[<{“‘])\s+", r"\1", text)
+        text = re.sub(r"\s+([）)】\]>}”’])", r"\1", text)
+        text = re.sub(r"\s{2,}", " ", text)
         return text.strip()
 
     def start_recording(self) -> None:
@@ -1847,12 +1894,19 @@ class DictationEngine:
                 return
             first = result_list[0] if isinstance(result_list[0], dict) else {}
             raw_text = first.get("text", "") if isinstance(first, dict) else ""
-            text = rich_transcription_postprocess(raw_text)
+            post_start = time.monotonic()
+            text = maybe_postprocess_text(raw_text)
+            post_elapsed = time.monotonic() - post_start
             text = self._cleanup_text(text, self.config.remove_emoji)
             if not text:
                 logging.info("ASR text empty: raw_text_len=%d", len(raw_text))
             else:
-                logging.info("ASR text ready: raw_len=%d clean_len=%d", len(raw_text), len(text))
+                logging.info(
+                    "ASR text ready: raw_len=%d clean_len=%d post_ms=%.3f",
+                    len(raw_text),
+                    len(text),
+                    post_elapsed * 1000.0,
+                )
             if text and not self.shutdown_flag:
                 self._paste_text(text)
             done_ts = time.monotonic()
