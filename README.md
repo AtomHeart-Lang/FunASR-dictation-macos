@@ -296,6 +296,7 @@ Grant permissions to the actual running process chain:
 - Input Monitoring
 
 Notes:
+- For first-time permission enrollment, launch by double-clicking `~/Applications/FunASR Dictation.app` (or the Desktop shortcut), not `./start_app.sh`.
 - If launch from Terminal works but launcher fails, re-create launcher and re-check permissions.
 - Desktop shortcut points to the same app in `~/Applications` to avoid duplicate TCC rows.
 - If you still see old `SenseVoice Dictation` rows in Privacy settings, reset old entries once:

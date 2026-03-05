@@ -295,12 +295,12 @@ I18N = {
         "en": "Legacy launch-at-login config detected but migration failed. Please toggle Enable Launch At Login off and on once.",
     },
     "permission_event_tap_failed": {
-        "zh": "无法创建键盘监听（event tap）。这通常是启动器权限归属问题。\n请重新创建桌面启动器后再试：\n1) ./remove_launcher.sh\n2) ./create_launcher.sh\n3) 在系统设置中给 “FunASR Dictation.app” 重新勾选 Accessibility 和 Input Monitoring。\n当前 Python: {python}",
-        "en": "Failed to create keyboard event tap. This is usually a launcher permission attribution issue.\nPlease recreate the launcher and retry:\n1) ./remove_launcher.sh\n2) ./create_launcher.sh\n3) Re-enable Accessibility and Input Monitoring for \"FunASR Dictation.app\" in System Settings.\nCurrent Python: {python}",
+        "zh": "无法创建键盘监听（event tap）。这通常是权限归属问题。\n请按以下步骤重试：\n1) ./remove_launcher.sh\n2) ./create_launcher.sh\n3) 双击 FunASR Dictation.app 启动一次（不要用终端）\n4) 在系统设置中给 “FunASR Dictation” 勾选 Accessibility 和 Input Monitoring。\n当前 Python: {python}",
+        "en": "Failed to create keyboard event tap. This is usually a permission-attribution issue.\nPlease retry with:\n1) ./remove_launcher.sh\n2) ./create_launcher.sh\n3) Launch once by double-clicking FunASR Dictation.app (not Terminal)\n4) Re-enable Accessibility and Input Monitoring for \"FunASR Dictation\" in System Settings.\nCurrent Python: {python}",
     },
     "permission_hint": {
-        "zh": "监听权限可能未生效。请在 系统设置 -> 隐私与安全性 -> Input Monitoring / Accessibility 中确认已勾选当前启动器，并重启应用。",
-        "en": "Input-monitoring permissions may not be effective. In System Settings -> Privacy & Security -> Input Monitoring / Accessibility, ensure the current launcher is enabled, then restart the app.",
+        "zh": "监听权限可能未生效。请从桌面或 Applications 双击 FunASR Dictation.app 启动，并在 系统设置 -> 隐私与安全性 -> Input Monitoring / Accessibility 中勾选对应条目后重启应用。",
+        "en": "Input-monitoring permissions may not be effective. Launch from FunASR Dictation.app (Desktop/Applications), then enable its entries in System Settings -> Privacy & Security -> Input Monitoring / Accessibility, and restart.",
     },
     "launch_login_update_failed": {"zh": "更新开机自动启动失败: {error}", "en": "Failed to update Launch At Login: {error}"},
 }
@@ -1094,6 +1094,40 @@ def ensure_listen_permission() -> bool:
     if not ok:
         logging.warning("listen permission missing: Input Monitoring/Accessibility not granted")
     return ok
+
+
+def log_runtime_context() -> None:
+    try:
+        pid = os.getpid()
+        ppid = os.getppid()
+        parent_cmd = ""
+        try:
+            proc = subprocess.run(
+                ["ps", "-p", str(ppid), "-o", "command="],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            parent_cmd = (proc.stdout or "").strip()
+        except Exception:
+            parent_cmd = ""
+        bundle_id = ""
+        try:
+            bundle = NSBundle.mainBundle()
+            if bundle is not None:
+                bundle_id = str(bundle.bundleIdentifier() or "")
+        except Exception:
+            bundle_id = ""
+        logging.info(
+            "runtime context pid=%s ppid=%s exec=%s parent=%s bundle_id=%s",
+            pid,
+            ppid,
+            sys.executable,
+            parent_cmd,
+            bundle_id,
+        )
+    except Exception as exc:
+        logging.warning("runtime context logging failed: %s", exc)
 
 
 def _effective_autostart_plist() -> Path:
@@ -2655,6 +2689,7 @@ def main() -> None:
         logging.info("another instance exists, skip launch")
         return
     atexit.register(release_single_instance)
+    log_runtime_context()
 
     app = SenseVoiceMenuBarApp()
     app.run()

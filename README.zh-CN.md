@@ -296,6 +296,7 @@ batch_size_s = 0
 - 输入监控（Input Monitoring）
 
 说明：
+- 首次授权时请务必双击 `~/Applications/FunASR Dictation.app`（或桌面快捷方式）启动，不要用 `./start_app.sh`。
 - 若终端启动可用但启动器不可用，请重建启动器并重新核对权限。
 - 桌面快捷方式指向 `~/Applications` 同一个应用，避免 TCC 列表重复。
 - 如果权限列表里仍残留旧的 `SenseVoice Dictation` 条目，可执行一次旧权限重置：

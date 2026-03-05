@@ -56,11 +56,38 @@ PLIST
 LAUNCH_SRC="$TMP_DIR/launcher_main.c"
 cat > "$LAUNCH_SRC" <<SRC
 #include <stdlib.h>
+#include <ApplicationServices/ApplicationServices.h>
+#include <CoreFoundation/CoreFoundation.h>
+
+static void request_tcc_permissions(void) {
+    // Input Monitoring prompt (ListenEvent).
+    CGRequestListenEventAccess();
+    // Accessibility prompt.
+    const void *keys[] = { kAXTrustedCheckOptionPrompt };
+    const void *vals[] = { kCFBooleanTrue };
+    CFDictionaryRef options = CFDictionaryCreate(
+        kCFAllocatorDefault,
+        keys,
+        vals,
+        1,
+        &kCFCopyStringDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks
+    );
+    if (options != NULL) {
+        AXIsProcessTrustedWithOptions(options);
+        CFRelease(options);
+    }
+}
+
 int main(void) {
+    request_tcc_permissions();
     return system("cd '$APP_DIR' && ./launch_from_desktop.sh >/dev/null 2>&1");
 }
 SRC
-clang "$LAUNCH_SRC" -O2 -o "$APP_BUNDLE/Contents/MacOS/FunASRLauncher"
+clang "$LAUNCH_SRC" -O2 \
+  -framework ApplicationServices \
+  -framework CoreFoundation \
+  -o "$APP_BUNDLE/Contents/MacOS/FunASRLauncher"
 
 ICON_SRC="$APP_ICON_PNG"
 if [[ ! -f "$ICON_SRC" ]]; then

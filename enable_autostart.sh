@@ -40,15 +40,6 @@ if pgrep -f "[m]enubar_dictation_app.py" >/dev/null 2>&1; then
   exit 0
 fi
 
-if [[ -x "$START_SCRIPT" ]]; then
-  cd "$APP_DIR"
-  if /bin/bash "$START_SCRIPT" >>"$RUNTIME_LOG" 2>&1; then
-    exit 0
-  fi
-  start_exit=$?
-  echo "[$(date '+%F %T')] start_app.sh failed with code $start_exit; fallback to launcher app" >> "$RUNTIME_LOG"
-fi
-
 if [[ ! -d "$LAUNCHER_APP" && -d "$LEGACY_LAUNCHER_APP" ]]; then
   LAUNCHER_APP="$LEGACY_LAUNCHER_APP"
 fi
@@ -58,7 +49,16 @@ if [[ -d "$LAUNCHER_APP" ]]; then
     exit 0
   fi
   open_exit=$?
-  echo "[$(date '+%F %T')] launcher open failed with code $open_exit" >> "$RUNTIME_LOG"
+  echo "[$(date '+%F %T')] launcher open failed with code $open_exit; fallback to start_app.sh" >> "$RUNTIME_LOG"
+fi
+
+if [[ -x "$START_SCRIPT" ]]; then
+  cd "$APP_DIR"
+  if /bin/bash "$START_SCRIPT" >>"$RUNTIME_LOG" 2>&1; then
+    exit 0
+  fi
+  start_exit=$?
+  echo "[$(date '+%F %T')] start_app.sh failed with code $start_exit" >> "$RUNTIME_LOG"
 fi
 
 echo "[$(date '+%F %T')] autostart failed: launcher/start script not found" >> "$RUNTIME_LOG"
