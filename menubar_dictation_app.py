@@ -12,7 +12,7 @@ import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 import pyperclip
@@ -34,6 +34,7 @@ from AppKit import (
     NSMakeSize,
     NSProgressIndicator,
     NSProgressIndicatorStyleSpinning,
+    NSRadioButton,
     NSScrollView,
     NSSwitchButton,
     NSTextField,
@@ -66,7 +67,7 @@ FUNASR_RUNTIME_DIR = APP_DIR / "funasr_nano_runtime"
 FUNASR_REMOTE_CODE_PATH = FUNASR_RUNTIME_DIR / "model.py"
 MENU_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
 APP_ICON = str((APP_DIR / "assets" / "app_launcher_icon.png").resolve())
-APP_BUILD = "2026-03-05-b14"
+APP_BUILD = "2026-03-05-b15"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 DEFAULT_NCPU = max(1, int(os.environ.get("SVD_NCPU", "2")))
@@ -278,6 +279,12 @@ I18N = {
         "zh": "当前触发方式：{mode}\n键盘快捷键：{hotkey}\n鼠标按键：{mouse}\n\n建议：先设置按键，再切换触发方式。",
         "en": "Current trigger mode: {mode}\nKeyboard hotkey: {hotkey}\nMouse button: {mouse}\n\nTip: set keys first, then choose trigger mode.",
     },
+    "hotkey_settings_mode_label": {"zh": "触发方式（单选）", "en": "Trigger Mode (single choice)"},
+    "hotkey_settings_keyboard_line": {"zh": "键盘快捷键：{value}", "en": "Keyboard Hotkey: {value}"},
+    "hotkey_settings_mouse_line": {"zh": "鼠标按键：{value}", "en": "Mouse Button: {value}"},
+    "hotkey_settings_tip_compact": {"zh": "建议：先编辑按键，再保存触发方式。", "en": "Tip: edit keys first, then save trigger mode."},
+    "hotkey_settings_btn_edit_keyboard": {"zh": "编辑键盘", "en": "Edit Keyboard"},
+    "hotkey_settings_btn_edit_mouse": {"zh": "编辑鼠标", "en": "Edit Mouse"},
     "hotkey_settings_btn_use_keyboard": {"zh": "启用键盘触发", "en": "Use Keyboard Trigger"},
     "hotkey_settings_btn_use_mouse": {"zh": "启用鼠标触发", "en": "Use Mouse Trigger"},
     "hotkey_settings_btn_set_keyboard": {"zh": "设置键盘快捷键", "en": "Set Keyboard Hotkey"},
@@ -473,10 +480,13 @@ def ui_choice_native(
     return "cancel"
 
 
-def ui_hotkey_settings_action(settings: "UISettings") -> str:
+def ui_hotkey_settings_action(
+    settings: "UISettings",
+    preferred_mode: Optional[str] = None,
+) -> Tuple[str, str]:
     app = NSApplication.sharedApplication()
     app.activateIgnoringOtherApps_(True)
-    mode = tr("mode_mouse") if settings.trigger_mode == "mouse" else tr("mode_keyboard")
+    mode_value = preferred_mode if preferred_mode in {"keyboard", "mouse"} else settings.trigger_mode
     hotkey = normalize_keyboard_hotkey(settings.keyboard_hotkey)
     mouse_value = normalize_mouse_button(settings.mouse_button) or settings.mouse_button
     alert = NSAlert.alloc().init()
@@ -487,23 +497,21 @@ def ui_hotkey_settings_action(settings: "UISettings") -> str:
     alert.setMessageText_("")
     alert.setInformativeText_("")
 
-    summary = tr(
-        "hotkey_settings_summary",
-        mode=mode,
-        hotkey=hotkey,
-        mouse=mouse_value,
-    )
-    panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 360, 178))
+    panel_w = 342
+    panel_h = 210
+    panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, panel_w, panel_h))
 
     icon = _app_icon_image(rounded=True)
     if icon is not None:
-        icon_size = 52
-        icon_x = (360 - icon_size) / 2.0
-        icon_view = NSImageView.alloc().initWithFrame_(NSMakeRect(icon_x, 114, icon_size, icon_size))
+        icon_size = 48
+        icon_x = (panel_w - icon_size) / 2.0
+        icon_view = NSImageView.alloc().initWithFrame_(
+            NSMakeRect(icon_x, panel_h - 62, icon_size, icon_size)
+        )
         icon_view.setImage_(icon)
         panel.addSubview_(icon_view)
 
-    title = NSTextField.alloc().initWithFrame_(NSMakeRect(10, 88, 340, 24))
+    title = NSTextField.alloc().initWithFrame_(NSMakeRect(10, panel_h - 92, panel_w - 20, 24))
     title.setEditable_(False)
     title.setBezeled_(False)
     title.setDrawsBackground_(False)
@@ -512,45 +520,72 @@ def ui_hotkey_settings_action(settings: "UISettings") -> str:
     title.setStringValue_(tr("menu_hotkey_settings"))
     panel.addSubview_(title)
 
-    y = 60
-    for line in summary.splitlines():
-        if not line.strip():
-            y -= 4
-            continue
-        text = NSTextField.alloc().initWithFrame_(NSMakeRect(18, y, 324, 20))
-        text.setEditable_(False)
-        text.setBezeled_(False)
-        text.setDrawsBackground_(False)
-        text.setSelectable_(False)
-        text.setStringValue_(line)
-        panel.addSubview_(text)
-        y -= 20
+    mode_label = NSTextField.alloc().initWithFrame_(NSMakeRect(14, panel_h - 118, panel_w - 28, 18))
+    mode_label.setEditable_(False)
+    mode_label.setBezeled_(False)
+    mode_label.setDrawsBackground_(False)
+    mode_label.setSelectable_(False)
+    mode_label.setStringValue_(tr("hotkey_settings_mode_label"))
+    panel.addSubview_(mode_label)
+
+    radio_keyboard = NSButton.alloc().initWithFrame_(NSMakeRect(22, panel_h - 144, 138, 20))
+    radio_keyboard.setButtonType_(NSRadioButton)
+    radio_keyboard.setTitle_(tr("mode_keyboard"))
+    radio_keyboard.setState_(NSControlStateValueOn if mode_value == "keyboard" else 0)
+    panel.addSubview_(radio_keyboard)
+
+    radio_mouse = NSButton.alloc().initWithFrame_(NSMakeRect(180, panel_h - 144, 138, 20))
+    radio_mouse.setButtonType_(NSRadioButton)
+    radio_mouse.setTitle_(tr("mode_mouse"))
+    radio_mouse.setState_(NSControlStateValueOn if mode_value == "mouse" else 0)
+    panel.addSubview_(radio_mouse)
+
+    keyboard_line = NSTextField.alloc().initWithFrame_(NSMakeRect(14, panel_h - 166, panel_w - 28, 18))
+    keyboard_line.setEditable_(False)
+    keyboard_line.setBezeled_(False)
+    keyboard_line.setDrawsBackground_(False)
+    keyboard_line.setSelectable_(False)
+    keyboard_line.setStringValue_(tr("hotkey_settings_keyboard_line", value=hotkey))
+    panel.addSubview_(keyboard_line)
+
+    mouse_line = NSTextField.alloc().initWithFrame_(NSMakeRect(14, panel_h - 188, panel_w - 28, 18))
+    mouse_line.setEditable_(False)
+    mouse_line.setBezeled_(False)
+    mouse_line.setDrawsBackground_(False)
+    mouse_line.setSelectable_(False)
+    mouse_line.setStringValue_(tr("hotkey_settings_mouse_line", value=mouse_value))
+    panel.addSubview_(mouse_line)
+
+    tip_line = NSTextField.alloc().initWithFrame_(NSMakeRect(14, 8, panel_w - 28, 18))
+    tip_line.setEditable_(False)
+    tip_line.setBezeled_(False)
+    tip_line.setDrawsBackground_(False)
+    tip_line.setSelectable_(False)
+    tip_line.setStringValue_(tr("hotkey_settings_tip_compact"))
+    panel.addSubview_(tip_line)
 
     alert.setAccessoryView_(panel)
-    alert.addButtonWithTitle_(tr("hotkey_settings_btn_set_keyboard"))
-    alert.addButtonWithTitle_(tr("hotkey_settings_btn_set_mouse"))
-    alert.addButtonWithTitle_(tr("hotkey_settings_btn_use_keyboard"))
-    alert.addButtonWithTitle_(tr("hotkey_settings_btn_use_mouse"))
-    alert.addButtonWithTitle_(tr("done"))
-    # Make "Done" the default (blue) button instead of the first action button.
-    try:
-        buttons = list(alert.buttons())
-        if len(buttons) >= 5:
-            for idx in range(4):
-                buttons[idx].setKeyEquivalent_("")
-            buttons[4].setKeyEquivalent_("\r")
-    except Exception:
-        pass
+    alert.addButtonWithTitle_(tr("save"))
+    alert.addButtonWithTitle_(tr("hotkey_settings_btn_edit_keyboard"))
+    alert.addButtonWithTitle_(tr("hotkey_settings_btn_edit_mouse"))
+    alert.addButtonWithTitle_(tr("cancel"))
     resp = alert.runModal()
+    kb_on = bool(radio_keyboard.state() == NSControlStateValueOn)
+    mouse_on = bool(radio_mouse.state() == NSControlStateValueOn)
+    if kb_on and not mouse_on:
+        selected_mode = "keyboard"
+    elif mouse_on and not kb_on:
+        selected_mode = "mouse"
+    else:
+        selected_mode = mode_value
+
     if resp == NSAlertFirstButtonReturn:
-        return "set_keyboard"
+        return "save", selected_mode
     if resp == NSAlertFirstButtonReturn + 1:
-        return "set_mouse"
+        return "set_keyboard", selected_mode
     if resp == NSAlertFirstButtonReturn + 2:
-        return "use_keyboard"
-    if resp == NSAlertFirstButtonReturn + 3:
-        return "use_mouse"
-    return "done"
+        return "set_mouse", selected_mode
+    return "cancel", selected_mode
 
 
 def run_with_ui_responsiveness(task_name: str, fn: Callable[[], object]):
@@ -2419,7 +2454,7 @@ class SenseVoiceMenuBarApp(rumps.App):
     def __init__(self):
         super().__init__(
             tr("app_name"),
-            title="FA○",
+            title="○",
             icon=MENU_ICON if Path(MENU_ICON).exists() else None,
             template=True,
             quit_button=None,
@@ -2482,7 +2517,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         if self.ui_settings.enable_dictation_on_app_start:
             # Show menubar status immediately, then enable in runloop.
             self.on_engine_status("LOADING")
-            self.title = "FA…"
+            self.title = "…"
             self.status_item.title = f'{tr("status_prefix")}: {localized_status("LOADING")}'
             self.engine.warmup_async()
             self.pending_startup_enable = True
@@ -2517,7 +2552,7 @@ class SenseVoiceMenuBarApp(rumps.App):
             except Exception:
                 pass
             nsstatusitem.setLength_(-1)
-            nsstatusitem.setTitle_(self.title or "FA○")
+            nsstatusitem.setTitle_(self.title or "○")
             try:
                 nsstatusitem.setHighlightMode_(True)
             except Exception:
@@ -2532,7 +2567,7 @@ class SenseVoiceMenuBarApp(rumps.App):
             except Exception:
                 button = None
             if button is not None:
-                button.setTitle_(self.title or "FA○")
+                button.setTitle_(self.title or "○")
                 if button.image() is None:
                     icon = self._menu_icon_image()
                     if icon is not None:
@@ -2679,15 +2714,15 @@ class SenseVoiceMenuBarApp(rumps.App):
         with self.status_lock:
             status = self.current_status
         title_map = {
-            "OFF": "FA○",
-            "LOADING": "FA…",
-            "UPDATING": "FA⇡",
-            "READY": "FA✓",
-            "RECORDING": "FA●",
-            "TRANSCRIBING": "FA↻",
-            "ERROR": "FA!",
+            "OFF": "○",
+            "LOADING": "…",
+            "UPDATING": "⇡",
+            "READY": "✓",
+            "RECORDING": "●",
+            "TRANSCRIBING": "↻",
+            "ERROR": "!",
         }
-        self.title = title_map.get(status, "FA•")
+        self.title = title_map.get(status, "•")
         if self.title != self.last_published_title:
             self.last_published_title = self.title
             logging.info("menubar title updated: %s (status=%s)", self.title, status)
@@ -2707,7 +2742,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.refresh_ui_labels()
         self.restart_trigger()
 
-    def _set_keyboard_hotkey_flow(self) -> None:
+    def _set_keyboard_hotkey_flow(self, *, switch_mode: bool = True) -> None:
         try:
             logging.info("on_set_hotkey: start")
             was_enabled = self.dictation_enabled
@@ -2722,7 +2757,8 @@ class SenseVoiceMenuBarApp(rumps.App):
                 return
 
             self.ui_settings.keyboard_hotkey = value
-            self.ui_settings.trigger_mode = "keyboard"
+            if switch_mode:
+                self.ui_settings.trigger_mode = "keyboard"
             save_ui_settings(self.ui_settings)
             self.refresh_ui_labels()
             if was_enabled:
@@ -2733,7 +2769,7 @@ class SenseVoiceMenuBarApp(rumps.App):
             logging.exception("on_set_hotkey crashed: %s", exc)
             ui_alert_native(tr("hotkey_set_failed", error=exc), title=tr("menu_set_hotkey"))
 
-    def _set_mouse_button_flow(self) -> None:
+    def _set_mouse_button_flow(self, *, switch_mode: bool = True) -> None:
         try:
             logging.info("on_set_mouse_button: start")
             was_enabled = self.dictation_enabled
@@ -2748,7 +2784,8 @@ class SenseVoiceMenuBarApp(rumps.App):
                 return
 
             self.ui_settings.mouse_button = value
-            self.ui_settings.trigger_mode = "mouse"
+            if switch_mode:
+                self.ui_settings.trigger_mode = "mouse"
             save_ui_settings(self.ui_settings)
             self.refresh_ui_labels()
             if was_enabled:
@@ -2761,21 +2798,19 @@ class SenseVoiceMenuBarApp(rumps.App):
 
     @rumps.clicked("Hotkey Settings")
     def on_hotkey_settings(self, _):
+        pending_mode = self.ui_settings.trigger_mode
         while True:
-            action = ui_hotkey_settings_action(self.ui_settings)
-            if action == "done":
+            action, pending_mode = ui_hotkey_settings_action(self.ui_settings, pending_mode)
+            if action == "cancel":
                 return
-            if action == "use_keyboard":
-                self._set_trigger_mode("keyboard")
-                continue
-            if action == "use_mouse":
-                self._set_trigger_mode("mouse")
-                continue
+            if action == "save":
+                self._set_trigger_mode(pending_mode)
+                return
             if action == "set_keyboard":
-                self._set_keyboard_hotkey_flow()
+                self._set_keyboard_hotkey_flow(switch_mode=False)
                 continue
             if action == "set_mouse":
-                self._set_mouse_button_flow()
+                self._set_mouse_button_flow(switch_mode=False)
                 continue
 
     @rumps.clicked("Model Config")
