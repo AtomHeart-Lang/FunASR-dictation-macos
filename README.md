@@ -290,12 +290,10 @@ Notes:
   - `open "$HOME/Applications/FunASR Dictation.app"`
 - Recording uses the macOS system default input device (no in-app auto device switching).
 - If hotkey works but recognition is always empty, check Microphone permission and Sound Input device (the app warns when captured audio is all-zero).
-- If you still see old `SenseVoice Dictation` rows in Privacy settings, reset old entries once:
-  - `tccutil reset Accessibility com.lee.sensevoice.dictation.launcher`
-  - `tccutil reset ListenEvent com.lee.sensevoice.dictation.launcher`
-  - `tccutil reset Accessibility com.lee.sensevoice.menubar`
-  - `tccutil reset ListenEvent com.lee.sensevoice.menubar`
-  - Then run `./create_launcher.sh`, reopen `FunASR Dictation.app`, and re-enable permissions for the new entry.
+- Permission identity migration (one-time, if permissions keep resetting):
+  - `./create_launcher.sh --force-rebuild`
+  - Reopen `FunASR Dictation.app` and grant permissions once.
+  - The launcher now keeps one stable bundle ID (`com.lee.sensevoice.dictation.launcher`) and auto-cleans legacy `com.lee.funasr.dictation.launcher` TCC leftovers.
 
 ## GitHub Sharing
 

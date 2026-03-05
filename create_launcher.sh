@@ -12,6 +12,46 @@ APP_ICON_PNG="$APP_DIR/assets/app_launcher_icon.png"
 MENU_ICON_PNG="$APP_DIR/assets/mic_menu_icon.png"
 # Keep legacy bundle id for TCC stability across upgrades/renames.
 APP_BUNDLE_ID="com.lee.sensevoice.dictation.launcher"
+LEGACY_BUNDLE_IDS=(
+  "com.lee.funasr.dictation.launcher"
+)
+APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
+LAUNCHER_IDENTITY_FILE="$APP_SUPPORT_DIR/launcher_identity.sha256"
+FORCE_REBUILD=0
+LAUNCHER_BIN="$APP_BUNDLE/Contents/MacOS/FunASRLauncher"
+
+for arg in "$@"; do
+  case "$arg" in
+    --force|--force-rebuild) FORCE_REBUILD=1 ;;
+    *)
+      echo "[ERROR] Unknown argument: $arg"
+      echo "Usage: ./create_launcher.sh [--force-rebuild]"
+      exit 1
+      ;;
+  esac
+done
+
+reset_tcc_for_bundle() {
+  local bundle_id="$1"
+  tccutil reset All "$bundle_id" >/dev/null 2>&1 || true
+  tccutil reset Accessibility "$bundle_id" >/dev/null 2>&1 || true
+  tccutil reset ListenEvent "$bundle_id" >/dev/null 2>&1 || true
+}
+
+reset_tcc_for_legacy_bundle_ids() {
+  local old_id=""
+  for old_id in "${LEGACY_BUNDLE_IDS[@]}"; do
+    reset_tcc_for_bundle "$old_id"
+  done
+}
+
+launcher_hash() {
+  local bin_path="$1"
+  if [[ ! -f "$bin_path" ]]; then
+    return 1
+  fi
+  shasum -a 256 "$bin_path" | awk '{print $1}'
+}
 
 if ! command -v clang >/dev/null 2>&1; then
   echo "[ERROR] clang not found. Install Xcode Command Line Tools first: xcode-select --install"
@@ -22,6 +62,31 @@ TMP_DIR="$(mktemp -d /tmp/funasr-launcher.XXXXXX)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$HOME/Applications"
+
+# Keep launcher binary stable by default: rebuilding changes ad-hoc cdhash and
+# may invalidate previously granted TCC permissions. Rebuild only when forced.
+if [[ "$FORCE_REBUILD" -eq 0 && -d "$APP_BUNDLE" && -x "$LAUNCHER_BIN" ]]; then
+  rm -rf "$LEGACY_APP_BUNDLE" "$LEGACY_DESKTOP_APP"
+  rm -f "$DESKTOP_APP"
+  ln -s "$APP_BUNDLE" "$DESKTOP_APP"
+  LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+  if [[ -x "$LSREGISTER" ]]; then
+    "$LSREGISTER" -f "$APP_BUNDLE" >/dev/null 2>&1 || true
+  fi
+  mkdir -p "$APP_SUPPORT_DIR"
+  current_hash="$(launcher_hash "$LAUNCHER_BIN" || true)"
+  saved_hash="$(cat "$LAUNCHER_IDENTITY_FILE" 2>/dev/null || true)"
+  if [[ -n "$current_hash" && "$current_hash" != "$saved_hash" ]]; then
+    reset_tcc_for_bundle "$APP_BUNDLE_ID"
+    echo "$current_hash" > "$LAUNCHER_IDENTITY_FILE"
+    echo "[INFO] Launcher identity changed/migrated. Reset TCC for $APP_BUNDLE_ID once."
+  fi
+  reset_tcc_for_legacy_bundle_ids
+  echo "[OK] Launcher app already exists; skipped rebuild to preserve TCC identity."
+  echo "[OK] Desktop shortcut created (symlink): $DESKTOP_APP"
+  exit 0
+fi
+
 rm -rf "$APP_BUNDLE" "$DESKTOP_APP" "$LEGACY_APP_BUNDLE" "$LEGACY_DESKTOP_APP"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 
@@ -66,21 +131,25 @@ cat > "$LAUNCH_SRC" <<SRC
 
 static void request_tcc_permissions(void) {
     // Input Monitoring prompt (ListenEvent).
-    CGRequestListenEventAccess();
+    if (!CGPreflightListenEventAccess()) {
+        CGRequestListenEventAccess();
+    }
     // Accessibility prompt.
-    const void *keys[] = { kAXTrustedCheckOptionPrompt };
-    const void *vals[] = { kCFBooleanTrue };
-    CFDictionaryRef options = CFDictionaryCreate(
-        kCFAllocatorDefault,
-        keys,
-        vals,
-        1,
-        &kCFCopyStringDictionaryKeyCallBacks,
-        &kCFTypeDictionaryValueCallBacks
-    );
-    if (options != NULL) {
-        AXIsProcessTrustedWithOptions(options);
-        CFRelease(options);
+    if (!AXIsProcessTrusted()) {
+        const void *keys[] = { kAXTrustedCheckOptionPrompt };
+        const void *vals[] = { kCFBooleanTrue };
+        CFDictionaryRef options = CFDictionaryCreate(
+            kCFAllocatorDefault,
+            keys,
+            vals,
+            1,
+            &kCFCopyStringDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks
+        );
+        if (options != NULL) {
+            AXIsProcessTrustedWithOptions(options);
+            CFRelease(options);
+        }
     }
 }
 
@@ -125,6 +194,14 @@ LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchS
 if [[ -x "$LSREGISTER" ]]; then
   "$LSREGISTER" -f "$APP_BUNDLE" >/dev/null 2>&1 || true
 fi
+
+mkdir -p "$APP_SUPPORT_DIR"
+current_hash="$(launcher_hash "$LAUNCHER_BIN" || true)"
+if [[ -n "$current_hash" ]]; then
+  echo "$current_hash" > "$LAUNCHER_IDENTITY_FILE"
+fi
+reset_tcc_for_bundle "$APP_BUNDLE_ID"
+reset_tcc_for_legacy_bundle_ids
 
 ln -s "$APP_BUNDLE" "$DESKTOP_APP"
 

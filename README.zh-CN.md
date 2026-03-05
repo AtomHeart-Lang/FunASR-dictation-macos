@@ -290,12 +290,10 @@ batch_size_s = 0
   - `open "$HOME/Applications/FunASR Dictation.app"`
 - 录音设备完全跟随 macOS 系统默认输入设备（程序内不做自动切换）。
 - 如果热键能触发但始终没有识别文本，请优先检查麦克风权限和系统输入设备（程序会在检测到全静音录音时给出提示）。
-- 如果权限列表里仍残留旧的 `SenseVoice Dictation` 条目，可执行一次旧权限重置：
-  - `tccutil reset Accessibility com.lee.sensevoice.dictation.launcher`
-  - `tccutil reset ListenEvent com.lee.sensevoice.dictation.launcher`
-  - `tccutil reset Accessibility com.lee.sensevoice.menubar`
-  - `tccutil reset ListenEvent com.lee.sensevoice.menubar`
-  - 然后执行 `./create_launcher.sh`，重新打开 `FunASR Dictation.app` 并给新条目重新勾选权限。
+- 权限身份迁移（仅在权限反复失效时执行一次）：
+  - `./create_launcher.sh --force-rebuild`
+  - 重新打开 `FunASR Dictation.app` 并重新授权一次。
+  - 启动器现在固定使用单一 Bundle ID（`com.lee.sensevoice.dictation.launcher`），并自动清理历史 `com.lee.funasr.dictation.launcher` 残留 TCC 记录。
 
 ## GitHub 分享
 
