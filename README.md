@@ -212,6 +212,7 @@ This file survives app restarts and macOS reboots.
 - `remove_launcher.sh`: remove launcher app + Desktop shortcut symlink
 - `uninstall.sh`: uninstall and cleanup runtime/model/env
 - `prepare_release.sh`: clean artifacts and produce release zip
+- `funasr_nano_runtime/`: bundled Fun-ASR runtime source files (`model.py`, `ctc.py`, `tools/utils.py`) required by `Fun-ASR-Nano-2512`
 
 ### Uninstall behavior
 

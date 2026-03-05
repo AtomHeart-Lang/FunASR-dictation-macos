@@ -212,6 +212,7 @@ remove_emoji = true
 - `remove_launcher.sh`：删除 Applications 启动器与桌面快捷方式
 - `uninstall.sh`：卸载并清理运行环境/模型/虚拟环境
 - `prepare_release.sh`：清理产物并打包发布 zip
+- `funasr_nano_runtime/`：内置 Fun-ASR 运行时代码（`model.py`、`ctc.py`、`tools/utils.py`），`Fun-ASR-Nano-2512` 必需
 
 ### 卸载行为
 

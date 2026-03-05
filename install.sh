@@ -105,8 +105,21 @@ fi
 
 if [[ "$WITH_MODEL" -eq 1 ]]; then
   echo "[Step] Downloading/refreshing Fun-ASR-Nano-2512 model cache"
-python - <<'PY'
+FUNASR_RUNTIME_DIR="$APP_DIR/funasr_nano_runtime"
+if [[ ! -f "$FUNASR_RUNTIME_DIR/model.py" ]]; then
+  echo "[ERROR] Missing runtime file: $FUNASR_RUNTIME_DIR/model.py"
+  echo "Please ensure repository files are complete, then rerun ./install.sh"
+  exit 1
+fi
+python - <<PY
+import os
+import sys
 from funasr import AutoModel
+
+runtime_dir = os.path.abspath("${FUNASR_RUNTIME_DIR}")
+remote_code_path = os.path.join(runtime_dir, "model.py")
+if runtime_dir not in sys.path:
+    sys.path.insert(0, runtime_dir)
 
 errors = []
 for trust_remote_code, remote_code in ((True, "./model.py"), (False, None)):
@@ -119,7 +132,7 @@ for trust_remote_code, remote_code in ((True, "./model.py"), (False, None)):
         disable_update=True,
     )
     if remote_code is not None:
-        kwargs["remote_code"] = remote_code
+        kwargs["remote_code"] = remote_code_path
     try:
         _ = AutoModel(**kwargs)
         break

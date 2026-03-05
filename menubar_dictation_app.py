@@ -58,6 +58,8 @@ LOG_PATH = APP_DIR / "menubar_debug.log"
 LOCK_PATH = APP_DIR / "menubar_app.lock"
 MODEL_NAME = "FunAudioLLM/Fun-ASR-Nano-2512"
 VAD_MODEL_NAME = "iic/speech_fsmn_vad_zh-cn-16k-common-pytorch"
+FUNASR_RUNTIME_DIR = APP_DIR / "funasr_nano_runtime"
+FUNASR_REMOTE_CODE_PATH = FUNASR_RUNTIME_DIR / "model.py"
 APP_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
 APP_BUILD = "2026-03-05-b14"
 LOCK_FD = None
@@ -258,6 +260,12 @@ def resolve_funasr_language(value: str) -> Optional[str]:
     if raw in {"", "auto", "nospeech"}:
         return None
     return FUNASR_LANGUAGE_MAP.get(raw, raw)
+
+
+def ensure_funasr_runtime_imports() -> None:
+    runtime_dir = str(FUNASR_RUNTIME_DIR.resolve())
+    if runtime_dir not in sys.path:
+        sys.path.insert(0, runtime_dir)
 
 
 def _applescript_escape(text: str) -> str:
@@ -1527,12 +1535,15 @@ class DictationEngine:
     def _load_model_worker(self) -> None:
         self._set_status("LOADING")
         try:
+            if not FUNASR_REMOTE_CODE_PATH.exists():
+                raise RuntimeError(f"Fun-ASR runtime file missing: {FUNASR_REMOTE_CODE_PATH}")
+            ensure_funasr_runtime_imports()
             load_errors = []
             try:
                 model = AutoModel(
                     model=MODEL_NAME,
                     trust_remote_code=True,
-                    remote_code="./model.py",
+                    remote_code=str(FUNASR_REMOTE_CODE_PATH),
                     vad_model=VAD_MODEL_NAME,
                     vad_kwargs={"max_single_segment_time": 30000},
                     device="cpu",
