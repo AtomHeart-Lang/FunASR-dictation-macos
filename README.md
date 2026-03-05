@@ -68,11 +68,10 @@ Use menu `Model Config` to edit and save runtime parameters directly in UI.
 The UI writes values into `config.toml` for persistence. Manual file editing is optional.
 
 - `language`: `auto|zh|en|ja` (for mixed Chinese/English dictation, keep `auto`)
-- `use_itn`: enable text normalization for numbers/date formatting
-- `batch_size_s`: inference batch seconds (default `8`)
-- `merge_vad`: merge VAD segments (default `false`)
-- `hotwords`: optional comma-separated domain terms (e.g. `OpenAI, GitHub, batch_size_s`)
-- `remove_emoji`: remove emoji symbols from final pasted text (default `true`)
+- `Normalize Numbers/Dates` (`use_itn`): ON makes numeric/date text cleaner
+- `Merge Long-Pause Segments` (`merge_vad`): ON may improve speed for long audio, OFF usually gives better sentence breaks
+- `hotwords`: domain terms for names/brands/jargon (comma/newline separated in UI)
+- `remove_emoji`: remove emoji symbols from final pasted text
 
 Default recommended preset in this release:
 - `language = "auto"`
@@ -81,45 +80,36 @@ Default recommended preset in this release:
 - `paste_delay_ms = 20`
 - `enable_beep = true`
 - `use_itn = true`
-- `batch_size_s = 8`
 - `merge_vad = false`
 - `hotwords = ""`
 - `remove_emoji = true`
+- `batch_size_s = 0` (fixed internal runtime value; not user-facing in UI)
 
 You can also edit these at runtime from menu `Model Config` (no manual file editing required).
 
-Model Config fields in UI:
-- `language`
-- `sample_rate`
-- `channels`
-- `paste_delay_ms`
-- `batch_size_s`
-- `hotwords`
-- `enable_beep`
-- `use_itn`
-- `merge_vad`
-- `remove_emoji`
+Model Config fields in UI (localized by system language):
+- Recognition Language (`language`)
+- Sample Rate / Channels / Paste Delay
+- Hot Words (large multiline input box; comma/newline separated)
+- Record Beeps (`enable_beep`)
+- Normalize Numbers/Dates (`use_itn`)
+- Merge Long-Pause Segments (`merge_vad`)
+- Remove Emoji Symbols (`remove_emoji`)
 
-### `batch_size_s` (speed vs. precision)
+### Option behavior (plain-language)
 
-- Meaning: how many seconds of speech are packed per decoding batch.
-- Larger value: fewer decode rounds, usually faster overall.
-- Smaller value: finer-grained decoding, usually a bit more stable for punctuation/word boundaries.
-- Recommended range: `6` to `12`.
+`Normalize Numbers/Dates` (`use_itn`)
+- ON: cleaner text formatting for numbers, dates, and units.
+- OFF: closer to raw spoken form.
 
-Practical presets:
-- Accuracy-first dictation: `batch_size_s = 6`
-- Balanced default: `batch_size_s = 8`
-- Long-form speed-first: `batch_size_s = 12`
+`Merge Long-Pause Segments` (`merge_vad`)
+- ON: may reduce decoding overhead for long audio.
+- OFF: usually better punctuation and sentence boundary stability.
 
-### `merge_vad` (segment strategy)
-
-- Meaning: whether to merge neighboring VAD (voice activity detection) segments before decoding.
-- `false` (default in this project): keep segments separated for stronger segmentation stability.
-- `true`: merge segments and reduce decode overhead in some scenarios.
-
-Practical recommendation:
-- For the current project preset (fast + stable in real usage): keep `merge_vad = false`.
+`Hot Words` (`hotwords`)
+- Add high-frequency domain words (names, products, technical terms).
+- In UI, input one term per line or comma-separated; app normalizes and deduplicates automatically.
+- Start from 5-50 terms and keep the list focused.
 
 ### How to change
 
@@ -131,11 +121,12 @@ Optional (advanced): edit `config.toml` manually, for example:
 
 ```toml
 language = "zh"
-batch_size_s = 8
 merge_vad = false
 use_itn = true
-hotwords = "OpenAI, GitHub, batch_size_s"
+hotwords = "OpenAI, GitHub, LaunchAgent"
 remove_emoji = true
+# runtime compatibility value (fixed):
+batch_size_s = 0
 ```
 
 Then restart the menubar app.

@@ -24,6 +24,7 @@ from AppKit import (
     NSAlertFirstButtonReturn,
     NSApplication,
     NSApplicationActivationPolicyAccessory,
+    NSBezelBorder,
     NSButton,
     NSControlStateValueOn,
     NSImage,
@@ -31,8 +32,10 @@ from AppKit import (
     NSMakeRect,
     NSProgressIndicator,
     NSProgressIndicatorStyleSpinning,
+    NSScrollView,
     NSSwitchButton,
     NSTextField,
+    NSTextView,
     NSView,
     NSWindow,
     NSWindowStyleMaskTitled,
@@ -64,6 +67,7 @@ APP_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
 APP_BUILD = "2026-03-05-b14"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
+DEFAULT_NCPU = max(1, int(os.environ.get("SVD_NCPU", "2")))
 EMOJI_RE = re.compile(
     "["
     "\U0001F300-\U0001F5FF"
@@ -146,13 +150,34 @@ I18N = {
     "invalid_model_config_title": {"zh": "模型参数无效", "en": "Invalid Model Config"},
     "model_config_title": {"zh": "模型参数设置", "en": "Model Config"},
     "model_config_intro": {
-        "zh": "可直接修改并保存运行参数",
-        "en": "Edit and save runtime parameters directly",
+        "zh": "使用易懂选项来调整识别表现（保存后下次录音生效）",
+        "en": "Tune dictation behavior with plain-language options (applies from next recording)",
     },
     "model_config_hint": {
-        "zh": "默认推荐：language=auto，use_itn=true，batch_size_s=8，merge_vad=false；专有词可写入 hotwords。",
-        "en": "Recommended: language=auto, use_itn=true, batch_size_s=8, merge_vad=false; put domain words in hotwords.",
+        "zh": "推荐：语言=auto，数字/日期规范化=开，长停顿合并=关；专有词写入高频词。",
+        "en": "Recommended: language=auto, normalize numbers/dates=ON, merge long pauses=OFF; add domain words in Hot Words.",
     },
+    "model_config_field_language": {"zh": "识别语言", "en": "Recognition Language"},
+    "model_config_field_sample_rate": {"zh": "采样率 (Hz)", "en": "Sample Rate (Hz)"},
+    "model_config_field_channels": {"zh": "声道数", "en": "Channels"},
+    "model_config_field_paste_delay": {"zh": "粘贴延迟 (ms)", "en": "Paste Delay (ms)"},
+    "model_config_field_hotwords": {"zh": "高频词（逗号或换行分隔）", "en": "Hot Words (comma/newline separated)"},
+    "model_config_field_hotwords_help": {
+        "zh": "用于专有词/人名/产品名，建议 5-50 个。",
+        "en": "For names, brands, and jargon. Recommended: 5-50 terms.",
+    },
+    "model_config_opt_beep": {"zh": "录音提示音（开始/结束）", "en": "Record Beeps (start/stop)"},
+    "model_config_opt_itn": {"zh": "数字与日期规范化（推荐开启）", "en": "Normalize Numbers/Dates (recommended ON)"},
+    "model_config_opt_itn_desc": {
+        "zh": "开启：文本更规整；关闭：更接近原始口语。",
+        "en": "ON: cleaner formatting. OFF: closer to raw spoken text.",
+    },
+    "model_config_opt_merge_vad": {"zh": "合并长停顿片段（速度优先）", "en": "Merge Long-Pause Segments (speed-first)"},
+    "model_config_opt_merge_vad_desc": {
+        "zh": "开启：长语音可能更快，但断句可能更粗；关闭：断句通常更自然。",
+        "en": "ON: can be faster for long audio, but punctuation may be rougher. OFF: usually better sentence breaks.",
+    },
+    "model_config_opt_remove_emoji": {"zh": "过滤表情符号", "en": "Remove Emoji Symbols"},
     "manual_hotkey_prompt": {
         "zh": "手动输入快捷键（例如 <ctrl>+<alt>+<space> 或 f8）",
         "en": "Manually enter a hotkey (e.g. <ctrl>+<alt>+<space> or f8).",
@@ -509,7 +534,7 @@ class CoreConfig:
     paste_delay_ms: int = 20
     enable_beep: bool = True
     use_itn: bool = True
-    batch_size_s: int = 8
+    batch_size_s: int = 0
     merge_vad: bool = False
     remove_emoji: bool = True
     hotwords: str = ""
@@ -536,7 +561,8 @@ def load_core_config() -> CoreConfig:
         paste_delay_ms=int(data.get("paste_delay_ms", 20)),
         enable_beep=bool(data.get("enable_beep", True)),
         use_itn=bool(data.get("use_itn", True)),
-        batch_size_s=int(data.get("batch_size_s", 8)),
+        # This runtime currently requires batch_size_s=0 for VAD path compatibility.
+        batch_size_s=0,
         merge_vad=bool(data.get("merge_vad", False)),
         remove_emoji=bool(data.get("remove_emoji", True)),
         hotwords=str(data.get("hotwords", "")),
@@ -577,12 +603,12 @@ def save_core_config(config: CoreConfig) -> None:
         "# Fun-ASR inference options\n"
         "# ITN: normalize numbers/date etc., may improve readability in some cases.\n"
         f"use_itn = {b(bool(config.use_itn))}\n"
-        "# seconds per decode batch; higher=faster, lower=usually better segmentation stability.\n"
-        "# recommended: 6~12\n"
-        f"batch_size_s = {int(config.batch_size_s)}\n"
+        "# NOTE: this runtime currently requires batch_size_s=0 for compatibility.\n"
+        "# Kept as a fixed internal value (not exposed in Model Config UI).\n"
+        "batch_size_s = 0\n"
         "# false=keep VAD segments, true=merge segments for potentially faster decoding.\n"
         f"merge_vad = {b(bool(config.merge_vad))}\n\n"
-        '# Optional comma-separated domain terms, e.g. "OpenAI, GitHub, batch_size_s"\n'
+        '# Optional comma-separated domain terms, e.g. "OpenAI, GitHub, LaunchAgent"\n'
         f'hotwords = "{config.hotwords.replace(chr(34), "").strip()}"\n\n'
         "# Remove emoji symbols from final pasted text.\n"
         f"remove_emoji = {b(bool(config.remove_emoji))}\n"
@@ -606,13 +632,24 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         "sample_rate": str(current.sample_rate),
         "channels": str(current.channels),
         "paste_delay_ms": str(current.paste_delay_ms),
-        "batch_size_s": str(current.batch_size_s),
         "hotwords": current.hotwords,
         "enable_beep": bool(current.enable_beep),
         "use_itn": bool(current.use_itn),
         "merge_vad": bool(current.merge_vad),
         "remove_emoji": bool(current.remove_emoji),
     }
+
+    def normalize_hotwords(raw: str) -> str:
+        tokens = [token.strip() for token in re.split(r"[,\n\r;，]+", raw or "") if token.strip()]
+        deduped: List[str] = []
+        seen = set()
+        for token in tokens:
+            key = token.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(token)
+        return ", ".join(deduped)
 
     while True:
         app = NSApplication.sharedApplication()
@@ -627,10 +664,10 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         alert.addButtonWithTitle_(tr("save"))
         alert.addButtonWithTitle_(tr("cancel"))
 
-        panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 430, 340))
+        panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 450, 450))
 
         def make_label(y: float, text: str):
-            label = NSTextField.alloc().initWithFrame_(NSMakeRect(10, y, 130, 22))
+            label = NSTextField.alloc().initWithFrame_(NSMakeRect(10, y, 160, 22))
             label.setEditable_(False)
             label.setBezeled_(False)
             label.setDrawsBackground_(False)
@@ -640,44 +677,58 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
             return label
 
         def make_input(y: float, value: str):
-            field = NSTextField.alloc().initWithFrame_(NSMakeRect(150, y, 260, 24))
+            field = NSTextField.alloc().initWithFrame_(NSMakeRect(170, y, 270, 24))
             field.setStringValue_(value)
             panel.addSubview_(field)
             return field
 
         def make_check(y: float, text: str, value: bool):
-            box = NSButton.alloc().initWithFrame_(NSMakeRect(10, y, 300, 22))
+            box = NSButton.alloc().initWithFrame_(NSMakeRect(10, y, 430, 22))
             box.setButtonType_(NSSwitchButton)
             box.setTitle_(text)
             box.setState_(NSControlStateValueOn if value else 0)
             panel.addSubview_(box)
             return box
 
-        make_label(300, "language")
-        language_field = make_input(298, state["language"])
-        make_label(268, "sample_rate")
-        sample_rate_field = make_input(266, state["sample_rate"])
-        make_label(236, "channels")
-        channels_field = make_input(234, state["channels"])
-        make_label(204, "paste_delay_ms")
-        paste_delay_field = make_input(202, state["paste_delay_ms"])
-        make_label(172, "batch_size_s")
-        batch_size_field = make_input(170, state["batch_size_s"])
-        make_label(140, "hotwords")
-        hotwords_field = make_input(138, state["hotwords"])
+        def make_plain_text(y: float, text: str):
+            label = NSTextField.alloc().initWithFrame_(NSMakeRect(10, y, 430, 18))
+            label.setEditable_(False)
+            label.setBezeled_(False)
+            label.setDrawsBackground_(False)
+            label.setSelectable_(False)
+            label.setStringValue_(text)
+            panel.addSubview_(label)
+            return label
 
-        enable_beep_box = make_check(108, "enable_beep", state["enable_beep"])
-        use_itn_box = make_check(84, "use_itn", state["use_itn"])
-        merge_vad_box = make_check(60, "merge_vad", state["merge_vad"])
-        remove_emoji_box = make_check(36, "remove_emoji", state["remove_emoji"])
+        def make_multiline_input(y: float, value: str):
+            scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(170, y, 270, 98))
+            scroll.setBorderType_(NSBezelBorder)
+            scroll.setHasVerticalScroller_(True)
+            scroll.setHasHorizontalScroller_(False)
+            text_view = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, 270, 98))
+            text_view.setString_((value or "").replace(", ", "\n"))
+            scroll.setDocumentView_(text_view)
+            panel.addSubview_(scroll)
+            return text_view
 
-        hint = NSTextField.alloc().initWithFrame_(NSMakeRect(10, 8, 410, 22))
-        hint.setEditable_(False)
-        hint.setBezeled_(False)
-        hint.setDrawsBackground_(False)
-        hint.setSelectable_(False)
-        hint.setStringValue_(tr("model_config_hint"))
-        panel.addSubview_(hint)
+        make_label(386, tr("model_config_field_language"))
+        language_field = make_input(384, state["language"])
+        make_label(354, tr("model_config_field_sample_rate"))
+        sample_rate_field = make_input(352, state["sample_rate"])
+        make_label(322, tr("model_config_field_channels"))
+        channels_field = make_input(320, state["channels"])
+        make_label(290, tr("model_config_field_paste_delay"))
+        paste_delay_field = make_input(288, state["paste_delay_ms"])
+        make_label(258, tr("model_config_field_hotwords"))
+        hotwords_field = make_multiline_input(158, state["hotwords"])
+        make_plain_text(138, tr("model_config_field_hotwords_help"))
+
+        enable_beep_box = make_check(112, tr("model_config_opt_beep"), state["enable_beep"])
+        use_itn_box = make_check(88, tr("model_config_opt_itn"), state["use_itn"])
+        make_plain_text(70, tr("model_config_opt_itn_desc"))
+        merge_vad_box = make_check(48, tr("model_config_opt_merge_vad"), state["merge_vad"])
+        make_plain_text(30, tr("model_config_opt_merge_vad_desc"))
+        remove_emoji_box = make_check(8, tr("model_config_opt_remove_emoji"), state["remove_emoji"])
 
         alert.setAccessoryView_(panel)
         resp = alert.runModal()
@@ -689,8 +740,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         state["sample_rate"] = sample_rate_field.stringValue().strip()
         state["channels"] = channels_field.stringValue().strip()
         state["paste_delay_ms"] = paste_delay_field.stringValue().strip()
-        state["batch_size_s"] = batch_size_field.stringValue().strip()
-        state["hotwords"] = hotwords_field.stringValue().strip()
+        state["hotwords"] = normalize_hotwords(str(hotwords_field.string()))
         state["enable_beep"] = bool(enable_beep_box.state() == NSControlStateValueOn)
         state["use_itn"] = bool(use_itn_box.state() == NSControlStateValueOn)
         state["merge_vad"] = bool(merge_vad_box.state() == NSControlStateValueOn)
@@ -706,7 +756,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
                 paste_delay_ms=parse_int(state["paste_delay_ms"], "paste_delay_ms", 0, 1000),
                 enable_beep=state["enable_beep"],
                 use_itn=state["use_itn"],
-                batch_size_s=parse_int(state["batch_size_s"], "batch_size_s", 1, 60),
+                batch_size_s=0,
                 merge_vad=state["merge_vad"],
                 remove_emoji=state["remove_emoji"],
                 hotwords=state["hotwords"],
@@ -1548,6 +1598,8 @@ class DictationEngine:
                     vad_kwargs={"max_single_segment_time": 30000},
                     device="cpu",
                     disable_update=True,
+                    disable_pbar=True,
+                    ncpu=DEFAULT_NCPU,
                 )
             except Exception as exc:
                 load_errors.append(f"trust_remote_code=True: {exc!r}")
@@ -1558,9 +1610,12 @@ class DictationEngine:
                     vad_kwargs={"max_single_segment_time": 30000},
                     device="cpu",
                     disable_update=True,
+                    disable_pbar=True,
+                    ncpu=DEFAULT_NCPU,
                 )
             with self.lock:
                 self.model = model
+            logging.info("model runtime ncpu=%d", DEFAULT_NCPU)
             if load_errors:
                 logging.warning("model load fallback used: %s", " | ".join(load_errors))
         except Exception as exc:
@@ -1615,16 +1670,22 @@ class DictationEngine:
         return trimmed
 
     def _paste_text(self, text: str) -> None:
+        logging.info("paste_text: len=%d preview=%r", len(text), text[:80])
         pyperclip.copy(text)
         # Cap delay so stale configs do not add visible latency.
         delay_ms = min(max(self.config.paste_delay_ms, 15), 60)
         time.sleep(delay_ms / 1000)
-        subprocess.run(
+        proc = subprocess.run(
             ["osascript", "-e", 'tell application "System Events" to keystroke "v" using command down'],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
             check=False,
         )
+        if proc.returncode != 0:
+            logging.warning("paste_text osascript failed rc=%s err=%s", proc.returncode, (proc.stderr or "").strip())
+        else:
+            logging.info("paste_text done")
 
     @staticmethod
     def _cleanup_text(text: str, remove_emoji: bool) -> str:
@@ -1698,33 +1759,84 @@ class DictationEngine:
         self._set_status("TRANSCRIBING")
         transcribe_start = time.monotonic()
         try:
+            raw_pcm = np.squeeze(audio).astype(np.float32)
+            if raw_pcm.ndim == 1 and raw_pcm.size > 0:
+                raw_peak = float(np.max(np.abs(raw_pcm)))
+                raw_rms = float(np.sqrt(np.mean(np.square(raw_pcm))))
+            else:
+                raw_peak = 0.0
+                raw_rms = 0.0
             pcm = self._trim_silence(audio, self.config.sample_rate)
+            if pcm.ndim == 1 and pcm.size > 0:
+                trim_peak = float(np.max(np.abs(pcm)))
+                trim_rms = float(np.sqrt(np.mean(np.square(pcm))))
+            else:
+                trim_peak = 0.0
+                trim_rms = 0.0
+            logging.info(
+                "audio_stats raw_len=%d raw_peak=%.5f raw_rms=%.5f trim_len=%d trim_peak=%.5f trim_rms=%.5f",
+                int(raw_pcm.size),
+                raw_peak,
+                raw_rms,
+                int(pcm.size if hasattr(pcm, "size") else 0),
+                trim_peak,
+                trim_rms,
+            )
             lang = resolve_funasr_language(self.config.language)
             gen_kwargs = {
                 "input": pcm,
                 "cache": {},
-                "batch_size_s": self.config.batch_size_s,
+                # Fun-ASR-Nano runtime with AutoModel+VAD requires this fixed value.
+                "batch_size_s": 0,
                 "merge_vad": self.config.merge_vad,
-                "fs": self.config.sample_rate,
+                "audio_fs": self.config.sample_rate,
                 "itn": self.config.use_itn,
+                "enable_ctc_aux": False,
             }
             if lang is not None:
                 gen_kwargs["language"] = lang
-            hotwords = (self.config.hotwords or "").strip()
+            hotwords_raw = (self.config.hotwords or "").strip()
+            hotwords = [item.strip() for item in hotwords_raw.split(",") if item.strip()]
             if hotwords:
                 gen_kwargs["hotwords"] = hotwords
 
             try:
                 result = self.model.generate(**gen_kwargs)
-            except TypeError:
+            except TypeError as exc:
                 # Backward compatibility for older runtime signatures.
-                if "itn" in gen_kwargs:
-                    gen_kwargs["use_itn"] = gen_kwargs.pop("itn")
-                gen_kwargs.pop("hotwords", None)
-                result = self.model.generate(**gen_kwargs)
-            raw_text = result[0].get("text", "") if result else ""
+                logging.warning("generate TypeError, retrying with compatibility kwargs: %s", exc)
+                retry_kwargs = dict(gen_kwargs)
+                if "itn" in retry_kwargs:
+                    retry_kwargs["use_itn"] = retry_kwargs.pop("itn")
+                retry_kwargs.pop("hotwords", None)
+                retry_kwargs.pop("enable_ctc_aux", None)
+                if "audio_fs" in retry_kwargs and "fs" not in retry_kwargs:
+                    retry_kwargs["fs"] = retry_kwargs.pop("audio_fs")
+                try:
+                    result = self.model.generate(**retry_kwargs)
+                except TypeError:
+                    # Last fallback: drop explicit sample-rate arg for runtimes that
+                    # infer it internally.
+                    retry_kwargs.pop("fs", None)
+                    result = self.model.generate(**retry_kwargs)
+
+            result_list = result
+            if isinstance(result, tuple):
+                result_list = result[0] if result else []
+            if not isinstance(result_list, list):
+                logging.warning("unexpected ASR result type: %s", type(result_list))
+                result_list = []
+            if not result_list:
+                logging.info("ASR returned empty result list")
+                return
+            first = result_list[0] if isinstance(result_list[0], dict) else {}
+            raw_text = first.get("text", "") if isinstance(first, dict) else ""
             text = rich_transcription_postprocess(raw_text)
             text = self._cleanup_text(text, self.config.remove_emoji)
+            if not text:
+                logging.info("ASR text empty: raw_text_len=%d", len(raw_text))
+            else:
+                logging.info("ASR text ready: raw_len=%d clean_len=%d", len(raw_text), len(text))
             if text and not self.shutdown_flag:
                 self._paste_text(text)
             done_ts = time.monotonic()
@@ -1735,7 +1847,8 @@ class DictationEngine:
                     done_ts - transcribe_start,
                     len(text),
                 )
-        except Exception:
+        except Exception as exc:
+            logging.exception("transcribe failed: %s", exc)
             self._set_status("ERROR")
         finally:
             with self.lock:
@@ -2297,12 +2410,11 @@ class SenseVoiceMenuBarApp(rumps.App):
             self.core_config = load_core_config()
             self.engine.config = self.core_config
             logging.info(
-                "on_model_config: saved language=%s sample_rate=%s channels=%s use_itn=%s batch_size_s=%s merge_vad=%s remove_emoji=%s hotwords_len=%s",
+                "on_model_config: saved language=%s sample_rate=%s channels=%s use_itn=%s merge_vad=%s remove_emoji=%s hotwords_len=%s",
                 self.core_config.language,
                 self.core_config.sample_rate,
                 self.core_config.channels,
                 self.core_config.use_itn,
-                self.core_config.batch_size_s,
                 self.core_config.merge_vad,
                 self.core_config.remove_emoji,
                 len((self.core_config.hotwords or "").strip()),
