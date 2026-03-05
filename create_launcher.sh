@@ -10,7 +10,8 @@ LEGACY_APP_BUNDLE="$HOME/Applications/$LEGACY_APP_NAME.app"
 LEGACY_DESKTOP_APP="$HOME/Desktop/$LEGACY_APP_NAME.app"
 APP_ICON_PNG="$APP_DIR/assets/app_launcher_icon.png"
 MENU_ICON_PNG="$APP_DIR/assets/mic_menu_icon.png"
-APP_BUNDLE_ID="com.lee.funasr.dictation.launcher"
+# Keep legacy bundle id for TCC stability across upgrades/renames.
+APP_BUNDLE_ID="com.lee.sensevoice.dictation.launcher"
 
 if ! command -v clang >/dev/null 2>&1; then
   echo "[ERROR] clang not found. Install Xcode Command Line Tools first: xcode-select --install"
