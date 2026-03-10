@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import atexit
 import fcntl
+import gc
 import json
 import logging
 import os
@@ -71,6 +72,9 @@ APP_BUILD = "2026-03-05-b15"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 DEFAULT_NCPU = max(1, int(os.environ.get("SVD_NCPU", "2")))
+IDLE_UNLOAD_ENABLED = os.environ.get("SVD_IDLE_UNLOAD", "1").strip() != "0"
+IDLE_UNLOAD_SECONDS = max(60, int(os.environ.get("SVD_IDLE_UNLOAD_S", "300")))
+MODEL_READY_WAIT_SECONDS = max(15, int(os.environ.get("SVD_MODEL_READY_WAIT_S", "90")))
 _FUNASR_IMPORT_LOCK = threading.Lock()
 _AUTOMODEL_CLS = None
 _POSTPROCESS_FN = None
@@ -1826,13 +1830,99 @@ class DictationEngine:
         self.stream = None
         self.frames: List[np.ndarray] = []
         self.lock = threading.Lock()
+        self.model_ready_event = threading.Event()
         self.recording = False
         self.processing = False
         self.shutdown_flag = False
         self.silent_audio_alerted = False
+        self.last_activity_ts = time.monotonic()
+        self.last_idle_check_ts = 0.0
 
     def _set_status(self, status: str) -> None:
         self.status_cb(status)
+
+    def _touch_activity(self) -> None:
+        self.last_activity_ts = time.monotonic()
+
+    def _clear_model_reference(self) -> bool:
+        model = None
+        with self.lock:
+            if self.model is None:
+                self.model_ready_event.clear()
+                return False
+            model = self.model
+            self.model = None
+            self.model_loading = False
+            self.model_ready_event.clear()
+        del model
+        gc.collect()
+        return True
+
+    def maybe_unload_idle_model(self) -> bool:
+        if not IDLE_UNLOAD_ENABLED:
+            return False
+        now = time.monotonic()
+        if now - self.last_idle_check_ts < 1.0:
+            return False
+        self.last_idle_check_ts = now
+        with self.lock:
+            should_unload = (
+                self.model is not None
+                and not self.model_loading
+                and not self.recording
+                and not self.processing
+                and not self.shutdown_flag
+                and (now - self.last_activity_ts) >= IDLE_UNLOAD_SECONDS
+            )
+        if not should_unload:
+            return False
+        unloaded = self._clear_model_reference()
+        if unloaded:
+            logging.info("idle model unload completed after %.1fs idle", now - self.last_activity_ts)
+        return unloaded
+
+    def _wait_for_model_ready(self, timeout_s: float = MODEL_READY_WAIT_SECONDS) -> bool:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            if self.shutdown_flag:
+                return False
+            with self.lock:
+                if self.model is not None:
+                    return True
+                loading = self.model_loading
+            if not loading:
+                self.warmup_async()
+            if self.model_ready_event.wait(timeout=0.2):
+                with self.lock:
+                    return self.model is not None and not self.shutdown_flag
+        logging.warning("wait_for_model_ready timed out after %.1fs", timeout_s)
+        return False
+
+    @staticmethod
+    def _prepare_audio_view(audio: np.ndarray) -> np.ndarray:
+        arr = np.squeeze(audio)
+        if arr.dtype != np.float32:
+            arr = arr.astype(np.float32, copy=False)
+        return arr
+
+    @staticmethod
+    def _generate_with_compat(model, gen_kwargs):
+        try:
+            return model.generate(**gen_kwargs)
+        except TypeError as exc:
+            logging.warning("generate TypeError, retrying with compatibility kwargs: %s", exc)
+            retry_kwargs = dict(gen_kwargs)
+            if "itn" in retry_kwargs:
+                retry_kwargs["use_itn"] = retry_kwargs.pop("itn")
+            retry_kwargs.pop("hotwords", None)
+            retry_kwargs.pop("enable_ctc_aux", None)
+            if "audio_fs" in retry_kwargs and "fs" not in retry_kwargs:
+                retry_kwargs["fs"] = retry_kwargs.pop("audio_fs")
+            try:
+                return model.generate(**retry_kwargs)
+            except TypeError:
+                retry_kwargs.pop("fs", None)
+                return model.generate(**retry_kwargs)
 
     def _emit_alert(self, key: str) -> None:
         if self.alert_cb is None:
@@ -1861,6 +1951,8 @@ class DictationEngine:
             if self.model is not None or self.model_loading:
                 return
             self.model_loading = True
+            self.model_ready_event.clear()
+        self._touch_activity()
         threading.Thread(target=self._load_model_worker, daemon=True).start()
 
     def _load_model_worker(self) -> None:
@@ -1899,6 +1991,8 @@ class DictationEngine:
                 )
             with self.lock:
                 self.model = model
+                self.model_ready_event.set()
+                self.last_activity_ts = time.monotonic()
             logging.info(
                 "model runtime ncpu=%d load_elapsed=%.3fs",
                 DEFAULT_NCPU,
@@ -1912,6 +2006,8 @@ class DictationEngine:
         finally:
             with self.lock:
                 self.model_loading = False
+                if self.model is None:
+                    self.model_ready_event.clear()
             if not self.shutdown_flag and self.model is not None and not self.recording and not self.processing:
                 self._set_status("READY")
 
@@ -1935,13 +2031,17 @@ class DictationEngine:
         with self.lock:
             if not self.frames:
                 return None
-            return np.concatenate(self.frames, axis=0)
+            frames = self.frames
+            self.frames = []
+        merged = np.concatenate(frames, axis=0)
+        del frames
+        return merged
 
     @staticmethod
     def _trim_silence(audio: np.ndarray, sample_rate: int) -> np.ndarray:
         if audio is None or audio.size == 0:
             return audio
-        arr = np.squeeze(audio).astype(np.float32)
+        arr = DictationEngine._prepare_audio_view(audio)
         if arr.ndim != 1 or arr.size < max(sample_rate // 5, 1):
             return arr
         abs_arr = np.abs(arr)
@@ -1992,14 +2092,16 @@ class DictationEngine:
         return text.strip()
 
     def start_recording(self) -> None:
-        if not self._ensure_model():
-            return
+        # Keep hotkey behavior immediate: start capturing audio even if the model
+        # is still warming up. The stop/transcribe path will wait for readiness.
+        self._ensure_model()
 
         with self.lock:
             if self.recording or self.processing or self.shutdown_flag:
                 return
             self.frames = []
             self.recording = True
+            self.last_activity_ts = time.monotonic()
         # Update UI state immediately, don't wait for stream startup.
         self._set_status("RECORDING")
 
@@ -2054,18 +2156,19 @@ class DictationEngine:
             if self.processing or self.shutdown_flag:
                 return
             self.processing = True
+            self.last_activity_ts = time.monotonic()
 
         self._set_status("TRANSCRIBING")
         transcribe_start = time.monotonic()
         try:
-            raw_pcm = np.squeeze(audio).astype(np.float32)
-            if raw_pcm.ndim == 1 and raw_pcm.size > 0:
-                raw_peak = float(np.max(np.abs(raw_pcm)))
-                raw_rms = float(np.sqrt(np.mean(np.square(raw_pcm))))
+            prepared = self._prepare_audio_view(audio)
+            if prepared.ndim == 1 and prepared.size > 0:
+                raw_peak = float(np.max(np.abs(prepared)))
+                raw_rms = float(np.sqrt(np.mean(np.square(prepared))))
             else:
                 raw_peak = 0.0
                 raw_rms = 0.0
-            pcm = self._trim_silence(audio, self.config.sample_rate)
+            pcm = self._trim_silence(prepared, self.config.sample_rate)
             if pcm.ndim == 1 and pcm.size > 0:
                 trim_peak = float(np.max(np.abs(pcm)))
                 trim_rms = float(np.sqrt(np.mean(np.square(pcm))))
@@ -2074,7 +2177,7 @@ class DictationEngine:
                 trim_rms = 0.0
             logging.info(
                 "audio_stats raw_len=%d raw_peak=%.5f raw_rms=%.5f trim_len=%d trim_peak=%.5f trim_rms=%.5f",
-                int(raw_pcm.size),
+                int(prepared.size if hasattr(prepared, "size") else 0),
                 raw_peak,
                 raw_rms,
                 int(pcm.size if hasattr(pcm, "size") else 0),
@@ -2087,6 +2190,12 @@ class DictationEngine:
                     self.silent_audio_alerted = True
                     self._emit_alert("silent_audio_hint")
                 return
+            if not self._wait_for_model_ready():
+                raise RuntimeError("ASR model not ready before transcription timeout")
+            with self.lock:
+                model = self.model
+            if model is None:
+                raise RuntimeError("ASR model unavailable")
             lang = resolve_funasr_language(self.config.language)
             gen_kwargs = {
                 "input": pcm,
@@ -2106,24 +2215,15 @@ class DictationEngine:
                 gen_kwargs["hotwords"] = hotwords
 
             try:
-                result = self.model.generate(**gen_kwargs)
-            except TypeError as exc:
-                # Backward compatibility for older runtime signatures.
-                logging.warning("generate TypeError, retrying with compatibility kwargs: %s", exc)
-                retry_kwargs = dict(gen_kwargs)
-                if "itn" in retry_kwargs:
-                    retry_kwargs["use_itn"] = retry_kwargs.pop("itn")
-                retry_kwargs.pop("hotwords", None)
-                retry_kwargs.pop("enable_ctc_aux", None)
-                if "audio_fs" in retry_kwargs and "fs" not in retry_kwargs:
-                    retry_kwargs["fs"] = retry_kwargs.pop("audio_fs")
-                try:
-                    result = self.model.generate(**retry_kwargs)
-                except TypeError:
-                    # Last fallback: drop explicit sample-rate arg for runtimes that
-                    # infer it internally.
-                    retry_kwargs.pop("fs", None)
-                    result = self.model.generate(**retry_kwargs)
+                import torch
+            except Exception:
+                torch = None
+
+            if torch is not None:
+                with torch.inference_mode():
+                    result = self._generate_with_compat(model, gen_kwargs)
+            else:
+                result = self._generate_with_compat(model, gen_kwargs)
 
             result_list = result
             if isinstance(result, tuple):
@@ -2152,6 +2252,7 @@ class DictationEngine:
             if text and not self.shutdown_flag:
                 self._paste_text(text)
             done_ts = time.monotonic()
+            self._touch_activity()
             if stop_ts is not None:
                 logging.info(
                     "latency stop_to_done=%.3fs transcribe=%.3fs text_len=%d",
@@ -2163,6 +2264,23 @@ class DictationEngine:
             logging.exception("transcribe failed: %s", exc)
             self._set_status("ERROR")
         finally:
+            try:
+                del audio
+            except Exception:
+                pass
+            try:
+                del prepared
+            except Exception:
+                pass
+            try:
+                del pcm
+            except Exception:
+                pass
+            try:
+                del model
+            except Exception:
+                pass
+            gc.collect()
             with self.lock:
                 self.processing = False
             if not self.shutdown_flag and not self.recording:
@@ -2191,9 +2309,9 @@ class DictationEngine:
 
         with self.lock:
             self.frames = []
-            self.model = None
             self.processing = False
             self.model_loading = False
+        self._clear_model_reference()
 
 
 class TriggerController:
@@ -2699,6 +2817,10 @@ class SenseVoiceMenuBarApp(rumps.App):
     def sync_status(self, _):
         self._flush_pending_alert()
         self._flush_pending_actions()
+        if self.dictation_enabled:
+            # Free model memory after inactivity without touching the trigger/
+            # permission chain, which must remain in the main process.
+            self.engine.maybe_unload_idle_model()
         with self.status_lock:
             status = self.current_status
         title_map = {
