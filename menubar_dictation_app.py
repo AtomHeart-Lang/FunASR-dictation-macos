@@ -894,7 +894,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         alert.addButtonWithTitle_(tr("save"))
         alert.addButtonWithTitle_(tr("cancel"))
 
-        panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 450, 486))
+        panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 450, 540))
 
         def make_label(y: float, text: str):
             label = NSTextField.alloc().initWithFrame_(NSMakeRect(10, y, 160, 22))
@@ -930,43 +930,43 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
             panel.addSubview_(label)
             return label
 
-        def make_multiline_input(y: float, value: str):
-            scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(170, y, 270, 108))
+        def make_multiline_input(y: float, value: str, height: float = 88):
+            scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(170, y, 270, height))
             scroll.setBorderType_(NSBezelBorder)
             scroll.setHasVerticalScroller_(True)
             scroll.setHasHorizontalScroller_(False)
-            text_view = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, 270, 108))
+            text_view = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, 270, height))
             text_view.setString_((value or "").replace(", ", "\n"))
             scroll.setDocumentView_(text_view)
             panel.addSubview_(scroll)
             return text_view
 
-        make_label(426, tr("model_config_field_language"))
-        language_field = make_input(424, state["language"])
-        make_label(394, tr("model_config_field_sample_rate"))
-        sample_rate_field = make_input(392, state["sample_rate"])
-        make_plain_text(374, tr("model_config_field_sample_rate_help"))
-        make_label(348, tr("model_config_field_channels"))
-        channels_field = make_input(346, state["channels"])
-        make_plain_text(328, tr("model_config_field_channels_help"))
-        make_label(302, tr("model_config_field_paste_delay"))
-        paste_delay_field = make_input(300, state["paste_delay_ms"])
-        make_plain_text(282, tr("model_config_field_paste_delay_help"))
+        make_label(488, tr("model_config_field_language"))
+        language_field = make_input(486, state["language"])
+        make_label(456, tr("model_config_field_sample_rate"))
+        sample_rate_field = make_input(454, state["sample_rate"])
+        make_plain_text(436, tr("model_config_field_sample_rate_help"))
+        make_label(408, tr("model_config_field_channels"))
+        channels_field = make_input(406, state["channels"])
+        make_plain_text(388, tr("model_config_field_channels_help"))
+        make_label(360, tr("model_config_field_paste_delay"))
+        paste_delay_field = make_input(358, state["paste_delay_ms"])
+        make_plain_text(340, tr("model_config_field_paste_delay_help"))
 
-        make_label(270, tr("model_config_field_idle_unload"))
-        idle_unload_field = make_input(268, state["idle_unload_seconds"])
-        make_plain_text(250, tr("model_config_field_idle_unload_help"))
+        make_label(312, tr("model_config_field_idle_unload"))
+        idle_unload_field = make_input(310, state["idle_unload_seconds"])
+        make_plain_text(292, tr("model_config_field_idle_unload_help"))
 
-        enable_beep_box = make_check(228, tr("model_config_opt_beep"), state["enable_beep"])
-        use_itn_box = make_check(202, tr("model_config_opt_itn"), state["use_itn"])
-        make_plain_text(184, tr("model_config_opt_itn_desc"))
-        merge_vad_box = make_check(160, tr("model_config_opt_merge_vad"), state["merge_vad"])
-        make_plain_text(142, tr("model_config_opt_merge_vad_desc"))
-        remove_emoji_box = make_check(128, tr("model_config_opt_remove_emoji"), state["remove_emoji"])
+        enable_beep_box = make_check(264, tr("model_config_opt_beep"), state["enable_beep"])
+        use_itn_box = make_check(236, tr("model_config_opt_itn"), state["use_itn"])
+        make_plain_text(218, tr("model_config_opt_itn_desc"))
+        merge_vad_box = make_check(190, tr("model_config_opt_merge_vad"), state["merge_vad"])
+        make_plain_text(172, tr("model_config_opt_merge_vad_desc"))
+        remove_emoji_box = make_check(146, tr("model_config_opt_remove_emoji"), state["remove_emoji"])
 
-        make_label(100, tr("model_config_field_hotwords"))
-        make_plain_text(82, tr("model_config_field_hotwords_help"))
-        hotwords_field = make_multiline_input(8, state["hotwords"])
+        make_label(116, tr("model_config_field_hotwords"))
+        make_plain_text(98, tr("model_config_field_hotwords_help"))
+        hotwords_field = make_multiline_input(8, state["hotwords"], 84)
 
         alert.setAccessoryView_(panel)
         resp = alert.runModal()
