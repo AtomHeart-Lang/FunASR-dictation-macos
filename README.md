@@ -78,6 +78,7 @@ Default recommended preset in this release:
 - `sample_rate = 16000`
 - `channels = 1`
 - `paste_delay_ms = 20`
+- `idle_unload_seconds = 300`
 - `enable_beep = true`
 - `use_itn = true`
 - `merge_vad = false`
@@ -90,6 +91,7 @@ You can also edit these at runtime from menu `Model Config` (no manual file edit
 Model Config fields in UI (localized by system language):
 - Recognition Language (`language`)
 - Sample Rate / Channels / Paste Delay
+- Idle Model Unload Seconds (`idle_unload_seconds`)
 - Hot Words (large multiline input box; comma/newline separated)
 - Record Beeps (`enable_beep`)
 - Normalize Numbers/Dates (`use_itn`)
@@ -101,6 +103,7 @@ Model Config fields in UI (localized by system language):
 - `sample_rate`: recommended `16000`; use `44100`/`48000` only when your microphone driver requires it.
 - `channels`: recommended `1` (mono); use `2` only for true stereo capture devices.
 - `paste_delay_ms`: recommended `20-40`; if paste occasionally fails, increase to `60`.
+- `idle_unload_seconds`: recommended `300`; set `0` to keep the model loaded forever. Lower values reduce idle memory sooner, but the next use after idle will reload the model.
 - These recommendations are shown directly in the Model Config UI.
 
 ### Option behavior (plain-language)
@@ -112,6 +115,11 @@ Model Config fields in UI (localized by system language):
 `Merge Long-Pause Segments` (`merge_vad`)
 - ON: may reduce decoding overhead for long audio.
 - OFF: usually better punctuation and sentence boundary stability.
+
+`Idle Model Unload Seconds` (`idle_unload_seconds`)
+- `0`: never unload the ASR model while dictation stays enabled.
+- `300` (recommended): unload model memory after 5 idle minutes and reload on next use.
+- Lower values: save memory more aggressively, but the first use after idle will wait for model reload.
 
 `Hot Words` (`hotwords`)
 - Add high-frequency domain words (names, products, technical terms).

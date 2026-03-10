@@ -68,12 +68,11 @@ FUNASR_RUNTIME_DIR = APP_DIR / "funasr_nano_runtime"
 FUNASR_REMOTE_CODE_PATH = FUNASR_RUNTIME_DIR / "model.py"
 MENU_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
 APP_ICON = str((APP_DIR / "assets" / "app_launcher_icon.png").resolve())
-APP_BUILD = "2026-03-05-b15"
+APP_BUILD = "2026-03-10-b16"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 DEFAULT_NCPU = max(1, int(os.environ.get("SVD_NCPU", "2")))
-IDLE_UNLOAD_ENABLED = os.environ.get("SVD_IDLE_UNLOAD", "1").strip() != "0"
-IDLE_UNLOAD_SECONDS = max(60, int(os.environ.get("SVD_IDLE_UNLOAD_S", "300")))
+DEFAULT_IDLE_UNLOAD_SECONDS = max(0, int(os.environ.get("SVD_IDLE_UNLOAD_S", "300")))
 MODEL_READY_WAIT_SECONDS = max(15, int(os.environ.get("SVD_MODEL_READY_WAIT_S", "90")))
 _FUNASR_IMPORT_LOCK = threading.Lock()
 _AUTOMODEL_CLS = None
@@ -217,6 +216,11 @@ I18N = {
     "model_config_field_paste_delay_help": {
         "zh": "建议 20-40；若偶发粘贴失败可提高到 60。",
         "en": "Recommended: 20-40. If paste occasionally fails, try up to 60.",
+    },
+    "model_config_field_idle_unload": {"zh": "空闲卸载模型 (秒)", "en": "Idle Model Unload (seconds)"},
+    "model_config_field_idle_unload_help": {
+        "zh": "0 = 永不卸载；建议 300。空闲时释放模型内存，下次使用会重新加载。",
+        "en": "0 = never unload. Recommended: 300. Frees model memory while idle; next use reloads it.",
     },
     "model_config_field_hotwords": {"zh": "高频词（逗号或换行分隔）", "en": "Hot Words (comma/newline separated)"},
     "model_config_field_hotwords_help": {
@@ -753,6 +757,7 @@ class CoreConfig:
     sample_rate: int = 16000
     channels: int = 1
     paste_delay_ms: int = 20
+    idle_unload_seconds: int = DEFAULT_IDLE_UNLOAD_SECONDS
     enable_beep: bool = True
     use_itn: bool = True
     batch_size_s: int = 0
@@ -780,6 +785,7 @@ def load_core_config() -> CoreConfig:
         sample_rate=int(data.get("sample_rate", 16000)),
         channels=int(data.get("channels", 1)),
         paste_delay_ms=int(data.get("paste_delay_ms", 20)),
+        idle_unload_seconds=max(0, int(data.get("idle_unload_seconds", DEFAULT_IDLE_UNLOAD_SECONDS))),
         enable_beep=bool(data.get("enable_beep", True)),
         use_itn=bool(data.get("use_itn", True)),
         # This runtime currently requires batch_size_s=0 for VAD path compatibility.
@@ -819,6 +825,8 @@ def save_core_config(config: CoreConfig) -> None:
         f"channels = {int(config.channels)}\n\n"
         "# Paste behavior (actual runtime clamps this into 15~60ms)\n"
         f"paste_delay_ms = {int(config.paste_delay_ms)}\n\n"
+        "# Release model memory after this many idle seconds. 0 = never unload.\n"
+        f"idle_unload_seconds = {max(0, int(config.idle_unload_seconds))}\n\n"
         "# Enable system sound when start/stop recording\n"
         f"enable_beep = {b(bool(config.enable_beep))}\n\n"
         "# Fun-ASR inference options\n"
@@ -853,6 +861,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         "sample_rate": str(current.sample_rate),
         "channels": str(current.channels),
         "paste_delay_ms": str(current.paste_delay_ms),
+        "idle_unload_seconds": str(current.idle_unload_seconds),
         "hotwords": current.hotwords,
         "enable_beep": bool(current.enable_beep),
         "use_itn": bool(current.use_itn),
@@ -885,7 +894,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         alert.addButtonWithTitle_(tr("save"))
         alert.addButtonWithTitle_(tr("cancel"))
 
-        panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 450, 452))
+        panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 450, 486))
 
         def make_label(y: float, text: str):
             label = NSTextField.alloc().initWithFrame_(NSMakeRect(10, y, 160, 22))
@@ -944,15 +953,19 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         paste_delay_field = make_input(300, state["paste_delay_ms"])
         make_plain_text(282, tr("model_config_field_paste_delay_help"))
 
-        enable_beep_box = make_check(264, tr("model_config_opt_beep"), state["enable_beep"])
-        use_itn_box = make_check(238, tr("model_config_opt_itn"), state["use_itn"])
-        make_plain_text(220, tr("model_config_opt_itn_desc"))
-        merge_vad_box = make_check(196, tr("model_config_opt_merge_vad"), state["merge_vad"])
-        make_plain_text(178, tr("model_config_opt_merge_vad_desc"))
-        remove_emoji_box = make_check(164, tr("model_config_opt_remove_emoji"), state["remove_emoji"])
+        make_label(270, tr("model_config_field_idle_unload"))
+        idle_unload_field = make_input(268, state["idle_unload_seconds"])
+        make_plain_text(250, tr("model_config_field_idle_unload_help"))
 
-        make_label(136, tr("model_config_field_hotwords"))
-        make_plain_text(118, tr("model_config_field_hotwords_help"))
+        enable_beep_box = make_check(228, tr("model_config_opt_beep"), state["enable_beep"])
+        use_itn_box = make_check(202, tr("model_config_opt_itn"), state["use_itn"])
+        make_plain_text(184, tr("model_config_opt_itn_desc"))
+        merge_vad_box = make_check(160, tr("model_config_opt_merge_vad"), state["merge_vad"])
+        make_plain_text(142, tr("model_config_opt_merge_vad_desc"))
+        remove_emoji_box = make_check(128, tr("model_config_opt_remove_emoji"), state["remove_emoji"])
+
+        make_label(100, tr("model_config_field_hotwords"))
+        make_plain_text(82, tr("model_config_field_hotwords_help"))
         hotwords_field = make_multiline_input(8, state["hotwords"])
 
         alert.setAccessoryView_(panel)
@@ -965,6 +978,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         state["sample_rate"] = sample_rate_field.stringValue().strip()
         state["channels"] = channels_field.stringValue().strip()
         state["paste_delay_ms"] = paste_delay_field.stringValue().strip()
+        state["idle_unload_seconds"] = idle_unload_field.stringValue().strip()
         state["hotwords"] = normalize_hotwords(str(hotwords_field.string()))
         state["enable_beep"] = bool(enable_beep_box.state() == NSControlStateValueOn)
         state["use_itn"] = bool(use_itn_box.state() == NSControlStateValueOn)
@@ -979,6 +993,9 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
                 sample_rate=parse_int(state["sample_rate"], "sample_rate", 8000, 48000),
                 channels=parse_int(state["channels"], "channels", 1, 2),
                 paste_delay_ms=parse_int(state["paste_delay_ms"], "paste_delay_ms", 0, 1000),
+                idle_unload_seconds=parse_int(
+                    state["idle_unload_seconds"], "idle_unload_seconds", 0, 86400
+                ),
                 enable_beep=state["enable_beep"],
                 use_itn=state["use_itn"],
                 batch_size_s=0,
@@ -1859,7 +1876,8 @@ class DictationEngine:
         return True
 
     def maybe_unload_idle_model(self) -> bool:
-        if not IDLE_UNLOAD_ENABLED:
+        idle_unload_seconds = max(0, int(self.config.idle_unload_seconds))
+        if idle_unload_seconds <= 0:
             return False
         now = time.monotonic()
         if now - self.last_idle_check_ts < 1.0:
@@ -1872,7 +1890,7 @@ class DictationEngine:
                 and not self.recording
                 and not self.processing
                 and not self.shutdown_flag
-                and (now - self.last_activity_ts) >= IDLE_UNLOAD_SECONDS
+                and (now - self.last_activity_ts) >= idle_unload_seconds
             )
         if not should_unload:
             return False
@@ -2936,10 +2954,11 @@ class SenseVoiceMenuBarApp(rumps.App):
             self.core_config = load_core_config()
             self.engine.config = self.core_config
             logging.info(
-                "on_model_config: saved language=%s sample_rate=%s channels=%s use_itn=%s merge_vad=%s remove_emoji=%s hotwords_len=%s",
+                "on_model_config: saved language=%s sample_rate=%s channels=%s idle_unload_seconds=%s use_itn=%s merge_vad=%s remove_emoji=%s hotwords_len=%s",
                 self.core_config.language,
                 self.core_config.sample_rate,
                 self.core_config.channels,
+                self.core_config.idle_unload_seconds,
                 self.core_config.use_itn,
                 self.core_config.merge_vad,
                 self.core_config.remove_emoji,
