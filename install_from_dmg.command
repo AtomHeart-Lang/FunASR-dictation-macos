@@ -93,13 +93,10 @@ echo "[Step] Rebuilding launcher for installed runtime path"
 
 RESTORE_ON_ERROR=0
 
-emit_progress 98 "Launching FunASR Dictation"
-echo "[Step] Launching app"
-open -a "FunASR Dictation" || open "$HOME/Applications/FunASR Dictation.app" || true
-
 echo
 emit_progress 100 "Installation completed"
 echo "[Done] Installation completed."
 echo "[Note] App: $HOME/Applications/FunASR Dictation.app"
-echo "[Note] If prompted, grant Microphone, Accessibility, and Input Monitoring to FunASR Dictation."
+echo "[Note] Open FunASR Dictation from the installer window or from ~/Applications after this window closes."
+echo "[Note] On first launch, grant Microphone, Accessibility, and Input Monitoring to FunASR Dictation."
 echo "[Note] Models are downloaded during installation and are not bundled in the DMG."

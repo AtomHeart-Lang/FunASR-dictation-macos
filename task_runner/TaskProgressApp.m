@@ -29,6 +29,7 @@ static NSString *SanitizeOutput(NSString *value) {
 @property(nonatomic, copy) NSString *appDisplayName;
 @property(nonatomic, copy) NSString *scriptRelativePath;
 @property(nonatomic, assign) BOOL confirmRequired;
+@property(nonatomic, assign) BOOL showSuccessOpenButton;
 @end
 
 @implementation TaskRunnerConfig
@@ -44,6 +45,7 @@ static NSString *SanitizeOutput(NSString *value) {
 @property(nonatomic, strong) NSScrollView *logScrollView;
 @property(nonatomic, strong) NSTextView *logTextView;
 @property(nonatomic, strong) NSButton *closeButton;
+@property(nonatomic, strong) NSButton *actionButton;
 @property(nonatomic, strong) NSTask *task;
 @property(nonatomic, strong) NSPipe *pipe;
 @property(nonatomic, strong) NSMutableString *partialLine;
@@ -115,6 +117,7 @@ static NSString *SanitizeOutput(NSString *value) {
     cfg.appDisplayName = [raw[@"AppDisplayName"] isKindOfClass:[NSString class]] ? raw[@"AppDisplayName"] : @"FunASR Dictation";
     cfg.scriptRelativePath = [raw[@"ScriptRelativePath"] isKindOfClass:[NSString class]] ? raw[@"ScriptRelativePath"] : @"run_task.sh";
     cfg.confirmRequired = [raw[@"ConfirmRequired"] respondsToSelector:@selector(boolValue)] ? [raw[@"ConfirmRequired"] boolValue] : NO;
+    cfg.showSuccessOpenButton = [raw[@"ShowSuccessOpenButton"] respondsToSelector:@selector(boolValue)] ? [raw[@"ShowSuccessOpenButton"] boolValue] : NO;
     return cfg;
 }
 
@@ -206,6 +209,15 @@ static NSString *SanitizeOutput(NSString *value) {
     self.closeButton.target = self;
     self.closeButton.action = @selector(onClose:);
     [content addSubview:self.closeButton];
+
+    self.actionButton = [[NSButton alloc] initWithFrame:NSMakeRect(404, 28, 136, 36)];
+    self.actionButton.bezelStyle = NSBezelStyleRounded;
+    self.actionButton.title = Localized(@"打开应用", @"Open App");
+    self.actionButton.hidden = YES;
+    self.actionButton.enabled = NO;
+    self.actionButton.target = self;
+    self.actionButton.action = @selector(onPrimaryAction:);
+    [content addSubview:self.actionButton];
 
     [self.window makeKeyAndOrderFront:nil];
 }
@@ -388,6 +400,11 @@ static NSString *SanitizeOutput(NSString *value) {
         self.progressBar.doubleValue = 100;
         self.statusLabel.stringValue = [self successStatus];
         [self appendLog:[NSString stringWithFormat:@"[Done] %@\n", [self successStatus]]];
+        if (self.config.showSuccessOpenButton && [self.config.mode isEqualToString:@"install"]) {
+            self.actionButton.hidden = NO;
+            self.actionButton.enabled = YES;
+            self.closeButton.frame = NSMakeRect(552, 28, 120, 36);
+        }
     } else {
         if (self.progressBar.doubleValue < 100) {
             self.progressBar.doubleValue = MAX(self.progressBar.doubleValue, 1);
@@ -408,6 +425,22 @@ static NSString *SanitizeOutput(NSString *value) {
 
 - (void)onClose:(id)sender {
     (void)sender;
+    [NSApp terminate:nil];
+}
+
+- (void)onPrimaryAction:(id)sender {
+    (void)sender;
+    NSString *appPath = [NSString stringWithFormat:@"%@/Applications/%@.app", NSHomeDirectory(), self.config.appDisplayName ?: @"FunASR Dictation"];
+    NSString *quotedPath = [appPath stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+    NSString *command = [NSString stringWithFormat:@"(sleep 0.4; open \"%@\") >/dev/null 2>&1 &", quotedPath];
+
+    NSTask *openTask = [[NSTask alloc] init];
+    openTask.executableURL = [NSURL fileURLWithPath:@"/bin/bash"];
+    openTask.arguments = @[@"-lc", command];
+    @try {
+        [openTask launchAndReturnError:nil];
+    } @catch (__unused NSException *exc) {
+    }
     [NSApp terminate:nil];
 }
 

@@ -57,10 +57,12 @@ To build the installer DMG locally:
 Output:
 
 ```bash
-./funasr-dictation-installer-2.1.1.dmg
+./funasr-dictation-installer-2.1.2.dmg
 ```
 
 Inside the DMG, double-click `Install FunASR Dictation.app`. A native macOS installer window appears, shows live progress/log output, downloads a standalone Python runtime, installs dependencies, downloads the latest model, then rebuilds the final launcher app with the stable TCC identity used by this project.
+
+When installation finishes, the installer no longer auto-launches the app. Click `Open App` in the installer window, or launch `~/Applications/FunASR Dictation.app` manually. This avoids a macOS Privacy & Security extension crash that can happen if permission prompts are triggered while the installer window is still frontmost.
 
 ## Installation
 

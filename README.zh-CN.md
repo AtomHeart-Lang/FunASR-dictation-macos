@@ -57,10 +57,12 @@ DMG 安装器面向普通用户：
 产物：
 
 ```bash
-./funasr-dictation-installer-2.1.1.dmg
+./funasr-dictation-installer-2.1.2.dmg
 ```
 
 打开 DMG 后，双击 `Install FunASR Dictation.app` 即可。安装器会弹出原生 macOS 安装窗口，实时显示进度与日志，下载独立 Python runtime、安装依赖、下载最新模型，然后基于本项目稳定的 TCC 身份重建最终启动器。
+
+安装完成后，安装器不再自动拉起应用。请在安装窗口点击 `打开应用`，或手动双击 `~/Applications/FunASR Dictation.app`。这样可以避免在安装器窗口仍处于前台时触发系统权限弹窗，从而绕开 macOS “隐私与安全性”扩展偶发崩溃的问题。
 
 ## 安装
 
