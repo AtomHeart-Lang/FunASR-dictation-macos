@@ -25,6 +25,7 @@ Compared with built-in dictation or many generic tools, this app focuses on:
 - Graphical uninstaller app in `~/Applications`
 - Desktop shortcut as a symlink to the same app (prevents duplicate permission entries)
 - DMG packaging flow for non-technical users (installer downloads standalone Python, dependencies, and latest model during setup)
+- Native installer/uninstaller progress windows on macOS (no Terminal window required)
 - One-command uninstall and cleanup
 
 ## Requirements
@@ -56,10 +57,10 @@ To build the installer DMG locally:
 Output:
 
 ```bash
-./funasr-dictation-installer-2.0.3.dmg
+./funasr-dictation-installer-2.1.0.dmg
 ```
 
-Inside the DMG, double-click `Install FunASR Dictation.app`. The installer opens Terminal, downloads a standalone Python runtime, installs dependencies, downloads the latest model, then rebuilds the final launcher app with the stable TCC identity used by this project.
+Inside the DMG, double-click `Install FunASR Dictation.app`. A native macOS installer window appears, shows live progress/log output, downloads a standalone Python runtime, installs dependencies, downloads the latest model, then rebuilds the final launcher app with the stable TCC identity used by this project.
 
 ## Installation
 
@@ -237,6 +238,7 @@ This file survives app restarts and macOS reboots.
 - `build_dmg.sh`: build the DMG installer for end users
 - `install_from_dmg.command`: installer entrypoint used inside the DMG app bundle
 - `download_python_runtime.sh`: download and verify the pinned standalone Python runtime for DMG installs
+- `task_runner/TaskProgressApp.m`: native macOS task window used by the installer/uninstaller
 - `launcher/FunASRLauncher.c`: launcher source that requests TCC and resolves runtime path from Application Support
 - `funasr_nano_runtime/`: bundled Fun-ASR runtime source files (`model.py`, `ctc.py`, `tools/utils.py`) required by `Fun-ASR-Nano-2512`
 

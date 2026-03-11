@@ -2,11 +2,13 @@
 set -euo pipefail
 
 APP_NAME="Uninstall FunASR Dictation"
-APP_VERSION="2.0.3"
+APP_VERSION="2.1.0"
 APP_BUNDLE="$HOME/Applications/$APP_NAME.app"
 APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
 RUNTIME_PATH_FILE="$APP_SUPPORT_DIR/runtime_app_dir.txt"
 ICON_SRC="$(cd "$(dirname "$0")" && pwd)/assets/app_launcher_icon.png"
+RUNNER_SRC="$(cd "$(dirname "$0")" && pwd)/task_runner/TaskProgressApp.m"
+RUNNER_TEMPLATE_BIN="$(cd "$(dirname "$0")" && pwd)/task_runner/TaskProgressApp"
 TMP_DIR="$(mktemp -d /tmp/funasr-uninstaller.XXXXXX)"
 
 cleanup() {
@@ -36,7 +38,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleExecutable</key>
-  <string>FunASRUninstaller</string>
+  <string>TaskProgressApp</string>
   <key>CFBundleIconFile</key>
   <string>app</string>
   <key>CFBundleIconName</key>
@@ -47,7 +49,24 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-cat > "$APP_BUNDLE/Contents/MacOS/FunASRUninstaller" <<'SCRIPT'
+cat > "$APP_BUNDLE/Contents/Resources/TaskRunnerConfig.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Mode</key>
+  <string>uninstall</string>
+  <key>AppDisplayName</key>
+  <string>FunASR Dictation</string>
+  <key>ScriptRelativePath</key>
+  <string>run_task.sh</string>
+  <key>ConfirmRequired</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+
+cat > "$APP_BUNDLE/Contents/Resources/run_task.sh" <<'SCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -59,22 +78,9 @@ runtime_dir="$(cat "$RUNTIME_PATH_FILE" 2>/dev/null || true)"
 runtime_dir="${runtime_dir%$'\r'}"
 
 if [[ -z "$runtime_dir" || ! -d "$runtime_dir" || ! -x "$runtime_dir/uninstall.sh" ]]; then
-  osascript -e 'display alert "FunASR Dictation" message "Installed runtime was not found. Please remove the app manually if it is already gone." as critical'
+  echo "[ERROR] Installed runtime was not found. Please remove the app manually if it is already gone."
   exit 1
 fi
-
-confirm=$(
-  osascript <<OSA
-button returned of (display dialog "This will remove FunASR Dictation, its launcher, Python runtime, model cache, and local settings." buttons {"Cancel", "Uninstall"} default button "Uninstall" with icon caution)
-OSA
-) || exit 0
-
-if [[ "$confirm" != "Uninstall" ]]; then
-  exit 0
-fi
-
-tmp_script="$(mktemp /tmp/funasr-uninstall-run.XXXXXX.sh)"
-chmod 700 "$tmp_script"
 
 if [[ "$runtime_dir" == "$STANDARD_RUNTIME_DIR" ]]; then
   uninstall_args="--delete-project-dir"
@@ -82,26 +88,21 @@ else
   uninstall_args=""
 fi
 
-cat > "$tmp_script" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
 cd "$runtime_dir"
 ./uninstall.sh $uninstall_args
-rm -f "$tmp_script"
-EOF
-
-if open -b com.apple.Terminal "$tmp_script" >/dev/null 2>&1; then
-  exit 0
-fi
-
-osascript <<OSA
-tell application id "com.apple.Terminal"
-  activate
-  do script quoted form of "$tmp_script"
-end tell
-OSA
 SCRIPT
-chmod +x "$APP_BUNDLE/Contents/MacOS/FunASRUninstaller"
+chmod +x "$APP_BUNDLE/Contents/Resources/run_task.sh"
+
+if [[ -x "$RUNNER_TEMPLATE_BIN" ]]; then
+  cp "$RUNNER_TEMPLATE_BIN" "$APP_BUNDLE/Contents/MacOS/TaskProgressApp"
+elif command -v clang >/dev/null 2>&1 && [[ -f "$RUNNER_SRC" ]]; then
+  clang -fobjc-arc "$RUNNER_SRC" -framework Cocoa -o "$APP_BUNDLE/Contents/MacOS/TaskProgressApp"
+else
+  echo "[ERROR] Missing task runner binary and clang is unavailable."
+  echo "Install Xcode Command Line Tools first: xcode-select --install"
+  exit 1
+fi
+chmod +x "$APP_BUNDLE/Contents/MacOS/TaskProgressApp"
 
 if [[ -f "$ICON_SRC" ]]; then
   ICONSET_DIR="$TMP_DIR/app.iconset"

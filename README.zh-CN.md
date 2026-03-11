@@ -25,6 +25,7 @@ FunASR Dictation 是一个基于 [Fun-ASR-Nano-2512](https://github.com/FunAudio
 - 在 `~/Applications` 生成图形化卸载器
 - 桌面快捷方式是同一应用的符号链接（避免重复权限条目）
 - 支持打包为 DMG，方便普通用户安装（安装时下载独立 Python、依赖和最新模型）
+- 安装与卸载使用原生 macOS 进度窗口，不再弹出终端
 - 一键卸载并清理环境
 
 ## 环境要求
@@ -56,10 +57,10 @@ DMG 安装器面向普通用户：
 产物：
 
 ```bash
-./funasr-dictation-installer-2.0.3.dmg
+./funasr-dictation-installer-2.1.0.dmg
 ```
 
-打开 DMG 后，双击 `Install FunASR Dictation.app` 即可。安装器会打开终端，下载独立 Python runtime、安装依赖、下载最新模型，然后基于本项目稳定的 TCC 身份重建最终启动器。
+打开 DMG 后，双击 `Install FunASR Dictation.app` 即可。安装器会弹出原生 macOS 安装窗口，实时显示进度与日志，下载独立 Python runtime、安装依赖、下载最新模型，然后基于本项目稳定的 TCC 身份重建最终启动器。
 
 ## 安装
 
@@ -237,6 +238,7 @@ batch_size_s = 0
 - `build_dmg.sh`：构建给终端用户使用的 DMG 安装包
 - `install_from_dmg.command`：DMG 内部使用的安装入口脚本
 - `download_python_runtime.sh`：为 DMG 安装下载并校验固定版本的独立 Python runtime
+- `task_runner/TaskProgressApp.m`：安装器/卸载器共用的原生 macOS 任务进度窗口
 - `launcher/FunASRLauncher.c`：launcher 源码，负责申请 TCC 权限并从 Application Support 读取真实运行目录
 - `funasr_nano_runtime/`：内置 Fun-ASR 运行时代码（`model.py`、`ctc.py`、`tools/utils.py`），`Fun-ASR-Nano-2512` 必需
 

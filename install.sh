@@ -23,6 +23,12 @@ WITH_MODEL=1
 WITH_LAUNCHER=1
 WITH_AUTOSTART=0
 
+emit_progress() {
+  local percent="$1"
+  shift
+  echo "[Progress] $percent $*"
+}
+
 for arg in "$@"; do
   case "$arg" in
     --no-model) WITH_MODEL=0 ;;
@@ -65,6 +71,7 @@ if [[ -z "$PYTHON_BIN" ]] && command -v python3 >/dev/null 2>&1 && python_ok "$(
 fi
 
 if [[ -z "$PYTHON_BIN" ]]; then
+  emit_progress 10 "Python 3.11+ not found, trying Homebrew"
   echo "[Step] Python 3.11+ not found. Trying to install via Homebrew."
   if ! command -v brew >/dev/null 2>&1; then
     echo "[ERROR] Homebrew is required for automatic Python installation."
@@ -101,12 +108,14 @@ print('[OK] Python version:', sys.version.split()[0])
 PY
 
 if [[ ! -d .venv ]]; then
+  emit_progress 40 "Creating Python virtual environment"
   echo "[Step] Creating virtual environment (.venv)"
   "$PYTHON_BIN" -m venv .venv
 fi
 
 source .venv/bin/activate
 
+emit_progress 48 "Installing Python dependencies"
 echo "[Step] Installing Python dependencies"
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r requirements.txt
@@ -117,6 +126,7 @@ if [[ ! -f config.toml ]]; then
 fi
 
 if [[ "$WITH_MODEL" -eq 1 ]]; then
+  emit_progress 68 "Downloading latest model files"
   echo "[Step] Downloading/refreshing Fun-ASR-Nano-2512 model cache"
 FUNASR_RUNTIME_DIR="$APP_DIR/funasr_nano_runtime"
 if [[ ! -f "$FUNASR_RUNTIME_DIR/model.py" ]]; then
@@ -161,17 +171,21 @@ PY
 fi
 
 if [[ "$WITH_LAUNCHER" -eq 1 ]]; then
+  emit_progress 86 "Creating launcher app"
   echo "[Step] Creating clickable launcher app"
   ./create_launcher.sh
 fi
 
+emit_progress 92 "Creating graphical uninstaller"
 echo "[Step] Creating graphical uninstaller"
 ./create_uninstaller.sh
 
 if [[ "$WITH_AUTOSTART" -eq 1 ]]; then
+  emit_progress 96 "Enabling launch at login"
   echo "[Step] Enabling autostart"
   ./enable_autostart.sh
 fi
 
+emit_progress 100 "Installation completed"
 echo "[Done] Installation completed."
 echo "Run: ./start_app.sh"

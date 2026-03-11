@@ -9,6 +9,12 @@ BACKUP_DIR=""
 RESTORE_ON_ERROR=1
 LOG_FILE="$INSTALL_ROOT/install.log"
 
+emit_progress() {
+  local percent="$1"
+  shift
+  echo "[Progress] $percent $*"
+}
+
 mkdir -p "$INSTALL_ROOT"
 TMP_DIR="$(mktemp -d "$INSTALL_ROOT/.payload.XXXXXX")"
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -35,9 +41,11 @@ on_error() {
   echo
   echo "[ERROR] DMG installation failed at line $line_no (exit $exit_code)."
   echo "[ERROR] Check log: $LOG_FILE"
-  osascript <<OSA >/dev/null 2>&1 || true
+  if [[ "${FUNASR_UI_MODE:-0}" != "1" ]]; then
+    osascript <<OSA >/dev/null 2>&1 || true
 display alert "FunASR Dictation Installer" message "Installation failed. Check log:\n$LOG_FILE" as critical
 OSA
+  fi
 }
 trap 'on_error $? $LINENO' ERR
 
@@ -46,10 +54,12 @@ if [[ ! -f "$PAYLOAD_ARCHIVE" ]]; then
   exit 1
 fi
 
+emit_progress 6 "Preparing installation"
 echo "[Step] Stopping running app instance"
 pkill -f "[m]enubar_dictation_app.py" >/dev/null 2>&1 || true
 pkill -f "[s]tart_app.sh" >/dev/null 2>&1 || true
 
+emit_progress 12 "Extracting installer payload"
 echo "[Step] Extracting payload"
 tar -xzf "$PAYLOAD_ARCHIVE" -C "$TMP_DIR"
 
@@ -72,19 +82,23 @@ fi
 
 cd "$APP_DIR"
 
+emit_progress 20 "Installing runtime and dependencies"
 echo "[Step] Installing runtime and downloading latest model"
 STANDALONE_PYTHON="$(./download_python_runtime.sh)"
 SVD_PYTHON_BIN="$STANDALONE_PYTHON" ./install.sh --no-launcher
 
+emit_progress 95 "Creating launcher app"
 echo "[Step] Rebuilding launcher for installed runtime path"
 ./create_launcher.sh --force-rebuild
 
 RESTORE_ON_ERROR=0
 
+emit_progress 98 "Launching FunASR Dictation"
 echo "[Step] Launching app"
 open -a "FunASR Dictation" || open "$HOME/Applications/FunASR Dictation.app" || true
 
 echo
+emit_progress 100 "Installation completed"
 echo "[Done] Installation completed."
 echo "[Note] App: $HOME/Applications/FunASR Dictation.app"
 echo "[Note] If prompted, grant Microphone, Accessibility, and Input Monitoring to FunASR Dictation."

@@ -8,6 +8,12 @@ PYTHON_BIN="$PYTHON_DIR/bin/python3.11"
 RELEASE_TAG="20260303"
 VERSION="3.11.15+20260303"
 
+emit_progress() {
+  local percent="$1"
+  shift
+  echo "[Progress] $percent $*"
+}
+
 pick_asset() {
   local arch
   arch="$(uname -m)"
@@ -38,6 +44,7 @@ pick_asset
 
 if [[ -x "$PYTHON_BIN" ]]; then
   if "$PYTHON_BIN" -V >/dev/null 2>&1; then
+    emit_progress 32 "Using existing standalone Python runtime"
     echo "[OK] Standalone Python already available: $PYTHON_BIN" >&2
     echo "$PYTHON_BIN"
     exit 0
@@ -58,6 +65,7 @@ trap cleanup EXIT
 
 mkdir -p "$INSTALL_ROOT"
 
+emit_progress 24 "Downloading standalone Python runtime"
 echo "[Step] Downloading standalone Python runtime" >&2
 curl --fail --location --progress-bar "$PYTHON_URL" -o "$ARCHIVE_PATH"
 
@@ -69,6 +77,7 @@ if [[ "$actual_sha" != "$PYTHON_SHA256" ]]; then
   exit 1
 fi
 
+emit_progress 32 "Extracting standalone Python runtime"
 echo "[Step] Extracting standalone Python runtime" >&2
 rm -rf "$RUNTIME_ROOT"
 mkdir -p "$RUNTIME_ROOT"
@@ -79,5 +88,6 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
   exit 1
 fi
 
+emit_progress 36 "Standalone Python runtime is ready"
 echo "[OK] Standalone Python ready: $PYTHON_BIN" >&2
 echo "$PYTHON_BIN"

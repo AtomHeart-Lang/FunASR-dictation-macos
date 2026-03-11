@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="FunASR Dictation"
-APP_VERSION="2.0.3"
+APP_VERSION="2.1.0"
 INSTALLER_APP_NAME="Install FunASR Dictation.app"
 DMG_NAME="funasr-dictation-installer-${APP_VERSION}.dmg"
 WORK_DIR="$(mktemp -d /tmp/funasr-dmg.XXXXXX)"
@@ -13,6 +13,8 @@ PAYLOAD_APP_DIR="$PAYLOAD_ROOT/sensevoice-dictation-macos"
 PAYLOAD_ARCHIVE="$WORK_DIR/funasr-dictation-payload.tar.gz"
 INSTALLER_APP="$STAGE_DIR/$INSTALLER_APP_NAME"
 ICON_SRC="$APP_DIR/assets/app_launcher_icon.png"
+TASK_RUNNER_SRC="$APP_DIR/task_runner/TaskProgressApp.m"
+TASK_RUNNER_BIN="$WORK_DIR/TaskProgressApp"
 
 cleanup() {
   rm -rf "$WORK_DIR"
@@ -62,11 +64,38 @@ if ! clang -arch arm64 -arch x86_64 "$APP_DIR/launcher/FunASRLauncher.c" -O2 \
 fi
 chmod +x "$PAYLOAD_APP_DIR/launcher/FunASRLauncher"
 
+echo "[Step] Building task progress app"
+mkdir -p "$PAYLOAD_APP_DIR/task_runner"
+if ! clang -fobjc-arc -arch arm64 -arch x86_64 "$TASK_RUNNER_SRC" -framework Cocoa -o "$TASK_RUNNER_BIN" >/dev/null 2>&1; then
+  clang -fobjc-arc "$TASK_RUNNER_SRC" -framework Cocoa -o "$TASK_RUNNER_BIN"
+fi
+chmod +x "$TASK_RUNNER_BIN"
+cp "$TASK_RUNNER_BIN" "$PAYLOAD_APP_DIR/task_runner/TaskProgressApp"
+
 echo "[Step] Packing payload archive"
 tar -czf "$PAYLOAD_ARCHIVE" -C "$PAYLOAD_ROOT" "sensevoice-dictation-macos"
 cp "$PAYLOAD_ARCHIVE" "$INSTALLER_APP/Contents/Resources/funasr-dictation-payload.tar.gz"
-cp "$APP_DIR/install_from_dmg.command" "$INSTALLER_APP/Contents/Resources/install_from_dmg.command"
-chmod +x "$INSTALLER_APP/Contents/Resources/install_from_dmg.command"
+cp "$APP_DIR/install_from_dmg.command" "$INSTALLER_APP/Contents/Resources/run_task.sh"
+chmod +x "$INSTALLER_APP/Contents/Resources/run_task.sh"
+cp "$TASK_RUNNER_BIN" "$INSTALLER_APP/Contents/MacOS/TaskProgressApp"
+chmod +x "$INSTALLER_APP/Contents/MacOS/TaskProgressApp"
+
+cat > "$INSTALLER_APP/Contents/Resources/TaskRunnerConfig.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Mode</key>
+  <string>install</string>
+  <key>AppDisplayName</key>
+  <string>$APP_NAME</string>
+  <key>ScriptRelativePath</key>
+  <string>run_task.sh</string>
+  <key>ConfirmRequired</key>
+  <false/>
+</dict>
+</plist>
+PLIST
 
 cat > "$INSTALLER_APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -86,7 +115,7 @@ cat > "$INSTALLER_APP/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleExecutable</key>
-  <string>InstallFunASRDictation</string>
+  <string>TaskProgressApp</string>
   <key>CFBundleIconFile</key>
   <string>app</string>
   <key>CFBundleIconName</key>
@@ -97,30 +126,11 @@ cat > "$INSTALLER_APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-cat > "$INSTALLER_APP/Contents/MacOS/InstallFunASRDictation" <<'SCRIPT'
-#!/usr/bin/env bash
-set -euo pipefail
-SELF_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SCRIPT_PATH="$SELF_DIR/Resources/install_from_dmg.command"
-
-if open -b com.apple.Terminal "$SCRIPT_PATH" >/dev/null 2>&1; then
-  exit 0
-fi
-
-osascript <<OSA >/dev/null 2>&1
-tell application id "com.apple.Terminal"
-  activate
-  do script quoted form of "$SCRIPT_PATH"
-end tell
-OSA
-SCRIPT
-chmod +x "$INSTALLER_APP/Contents/MacOS/InstallFunASRDictation"
-
 cat > "$STAGE_DIR/README.txt" <<TXT
 FunASR Dictation macOS Installer
 
 1. Double-click "Install FunASR Dictation.app"
-2. Wait while the standalone Python runtime, Python dependencies, and the latest model are downloaded
+2. A native macOS installer window will show live progress while the standalone Python runtime, Python dependencies, and the latest model are downloaded
 3. Grant Microphone / Accessibility / Input Monitoring when FunASR Dictation first launches
 
 The DMG does not include the model cache.

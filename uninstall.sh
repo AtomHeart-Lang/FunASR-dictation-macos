@@ -15,6 +15,13 @@ APP_SUPPORT_UI_SETTINGS="$AUTOSTART_DIR/ui_settings.json"
 APP_SUPPORT_UI_SETTINGS_TMP="$AUTOSTART_DIR/ui_settings.json.tmp"
 APP_SUPPORT_UI_SETTINGS_BROKEN="$AUTOSTART_DIR/ui_settings.json.broken"
 DELETE_DIR=0
+
+emit_progress() {
+  local percent="$1"
+  shift
+  echo "[Progress] $percent $*"
+}
+
 for arg in "$@"; do
   case "$arg" in
     --delete-project-dir) DELETE_DIR=1 ;;
@@ -50,7 +57,7 @@ TCC_IDS=(
   "com.lee.sensevoice.menubar"
 )
 
-
+emit_progress 8 "Disabling launch agents"
 echo "[Step] Disable launch agents"
 launchctl bootout "$LAUNCH_DOMAIN/$LAUNCH_LABEL" >/dev/null 2>&1 || true
 launchctl disable "$LAUNCH_DOMAIN/$LAUNCH_LABEL" >/dev/null 2>&1 || true
@@ -64,17 +71,17 @@ for p in "${PLISTS[@]}"; do
     echo "  - removed $p"
   fi
 done
-
+emit_progress 18 "Stopping running processes"
 echo "[Step] Stop running process"
 pkill -f "[m]enubar_dictation_app.py" >/dev/null 2>&1 || true
 pkill -f "[s]tart_app.sh" >/dev/null 2>&1 || true
 pkill -f "[s]tart_menubar_app.sh" >/dev/null 2>&1 || true
 pkill -f "[m]ain.py" >/dev/null 2>&1 || true
-
+emit_progress 30 "Removing launcher apps"
 echo "[Step] Remove launcher apps"
 rm -rf "$APP_BUNDLE" "$UNINSTALLER_APP" "$DESKTOP_APP"
 rm -rf "$LEGACY_APP_BUNDLE" "$LEGACY_DESKTOP_APP"
-
+emit_progress 45 "Removing model cache"
 echo "[Step] Remove model cache"
 for d in "${MODEL_DIRS[@]}"; do
   if [[ -d "$d" ]]; then
@@ -82,7 +89,7 @@ for d in "${MODEL_DIRS[@]}"; do
     echo "  - removed $d"
   fi
 done
-
+emit_progress 62 "Removing runtime files"
 echo "[Step] Remove runtime artifacts"
 rm -rf "$APP_DIR/.venv" "$APP_DIR/__pycache__"
 rm -f "$APP_DIR"/*.log
@@ -97,7 +104,7 @@ rm -rf "$STANDARD_INSTALL_PYTHON_DIR"
 rm -f "$STANDARD_INSTALL_ROOT/install.log"
 rmdir "$STANDARD_INSTALL_ROOT" >/dev/null 2>&1 || true
 rm -f /tmp/sensevoice_menubar.log /tmp/sensevoice_menubar_debug.log
-
+emit_progress 82 "Resetting macOS permissions"
 echo "[Step] Reset TCC permissions (best effort)"
 for id in "${TCC_IDS[@]}"; do
   tccutil reset All "$id" >/dev/null 2>&1 || true
@@ -106,6 +113,7 @@ for id in "${TCC_IDS[@]}"; do
 done
 
 if [[ "$DELETE_DIR" -eq 1 ]]; then
+  emit_progress 92 "Removing installed project directory"
   echo "[Step] Remove project directory"
   cd "$(dirname "$APP_DIR")"
   rm -rf "$APP_DIR"
@@ -116,6 +124,7 @@ if [[ "$DELETE_DIR" -eq 1 ]]; then
   rm -rf "$STANDARD_INSTALL_ROOT"
 fi
 
+emit_progress 100 "Uninstall completed"
 echo "[Done] Uninstall completed."
 if [[ "$DELETE_DIR" -eq 0 ]]; then
   echo "[Hint] Add --delete-project-dir to remove the source directory too."
