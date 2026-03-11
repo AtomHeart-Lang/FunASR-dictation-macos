@@ -4,13 +4,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_ROOT="$HOME/Library/Application Support/FunASRDictation"
 APP_DIR="$INSTALL_ROOT/app"
-TMP_DIR="$(mktemp -d "$INSTALL_ROOT/.payload.XXXXXX")"
 PAYLOAD_ARCHIVE="$SCRIPT_DIR/funasr-dictation-payload.tar.gz"
 BACKUP_DIR=""
 RESTORE_ON_ERROR=1
 LOG_FILE="$INSTALL_ROOT/install.log"
 
 mkdir -p "$INSTALL_ROOT"
+TMP_DIR="$(mktemp -d "$INSTALL_ROOT/.payload.XXXXXX")"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 cleanup() {
@@ -28,6 +28,18 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+on_error() {
+  local exit_code="$1"
+  local line_no="$2"
+  echo
+  echo "[ERROR] DMG installation failed at line $line_no (exit $exit_code)."
+  echo "[ERROR] Check log: $LOG_FILE"
+  osascript <<OSA >/dev/null 2>&1 || true
+display alert "FunASR Dictation Installer" message "Installation failed. Check log:\n$LOG_FILE" as critical
+OSA
+}
+trap 'on_error $? $LINENO' ERR
 
 if [[ ! -f "$PAYLOAD_ARCHIVE" ]]; then
   echo "[ERROR] Missing installer payload: $PAYLOAD_ARCHIVE"
@@ -74,5 +86,6 @@ open -a "FunASR Dictation" || open "$HOME/Applications/FunASR Dictation.app" || 
 
 echo
 echo "[Done] Installation completed."
+echo "[Note] App: $HOME/Applications/FunASR Dictation.app"
 echo "[Note] If prompted, grant Microphone, Accessibility, and Input Monitoring to FunASR Dictation."
 echo "[Note] Models are downloaded during installation and are not bundled in the DMG."
