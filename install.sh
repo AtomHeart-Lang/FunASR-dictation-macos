@@ -8,12 +8,16 @@ chmod +x \
   ./install.sh \
   ./start_app.sh \
   ./create_launcher.sh \
+  ./create_uninstaller.sh \
   ./launch_from_desktop.sh \
   ./remove_launcher.sh \
   ./enable_autostart.sh \
   ./disable_autostart.sh \
   ./uninstall.sh \
-  ./prepare_release.sh
+  ./prepare_release.sh \
+  ./build_dmg.sh \
+  ./install_from_dmg.command \
+  ./download_python_runtime.sh
 
 WITH_MODEL=1
 WITH_LAUNCHER=1
@@ -47,7 +51,16 @@ raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
 PY
 }
 
-if command -v python3 >/dev/null 2>&1 && python_ok "$(command -v python3)"; then
+if [[ -n "${SVD_PYTHON_BIN:-}" ]]; then
+  if python_ok "$SVD_PYTHON_BIN"; then
+    PYTHON_BIN="$SVD_PYTHON_BIN"
+  else
+    echo "[ERROR] SVD_PYTHON_BIN is set but invalid: $SVD_PYTHON_BIN"
+    exit 1
+  fi
+fi
+
+if [[ -z "$PYTHON_BIN" ]] && command -v python3 >/dev/null 2>&1 && python_ok "$(command -v python3)"; then
   PYTHON_BIN="$(command -v python3)"
 fi
 
@@ -151,6 +164,9 @@ if [[ "$WITH_LAUNCHER" -eq 1 ]]; then
   echo "[Step] Creating clickable launcher app"
   ./create_launcher.sh
 fi
+
+echo "[Step] Creating graphical uninstaller"
+./create_uninstaller.sh
 
 if [[ "$WITH_AUTOSTART" -eq 1 ]]; then
   echo "[Step] Enabling autostart"

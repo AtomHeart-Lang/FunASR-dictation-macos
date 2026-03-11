@@ -22,17 +22,44 @@ Compared with built-in dictation or many generic tools, this app focuses on:
 - OS autostart toggle from menu (`Enable Launch At Login`)
 - Dictation-on-app-start toggle from menu (`Enable Dictation On App Start`)
 - Clickable launcher app in `~/Applications`
+- Graphical uninstaller app in `~/Applications`
 - Desktop shortcut as a symlink to the same app (prevents duplicate permission entries)
+- DMG packaging flow for non-technical users (installer downloads standalone Python, dependencies, and latest model during setup)
 - One-command uninstall and cleanup
 
 ## Requirements
 
 - macOS 11+
-- Python 3.11+ (installer will auto-install via Homebrew when missing)
-- Xcode Command Line Tools (`clang`) for launcher generation
+- Python 3.11+ only for source installs (`./install.sh`)
+- Xcode Command Line Tools (`clang`) only for source installs when no bundled launcher binary is present
 
 Optional:
 - `ffmpeg` (not required by this app flow)
+
+## DMG Installation
+
+The DMG installer is designed for normal users:
+- the DMG does not include the model cache
+- no Homebrew or preinstalled Python is required
+- installation downloads a standalone Python runtime, Python dependencies, and the latest model during setup
+- runtime files are copied to `~/Library/Application Support/FunASRDictation/app`
+- bundled Python runtime is stored under `~/Library/Application Support/FunASRDictation/python-runtime`
+- the final clickable app is created at `~/Applications/FunASR Dictation.app`
+- a graphical uninstaller app is also created at `~/Applications/Uninstall FunASR Dictation.app`
+
+To build the installer DMG locally:
+
+```bash
+./build_dmg.sh
+```
+
+Output:
+
+```bash
+./funasr-dictation-installer-2.0.0.dmg
+```
+
+Inside the DMG, double-click `Install FunASR Dictation.app`. The installer opens Terminal, downloads a standalone Python runtime, installs dependencies, downloads the latest model, then rebuilds the final launcher app with the stable TCC identity used by this project.
 
 ## Installation
 
@@ -60,6 +87,8 @@ Installer options:
 ```
 
 Or run from desktop/application icon after `./create_launcher.sh`.
+
+For DMG installs, launch by double-clicking `Install FunASR Dictation.app` inside the DMG instead of running `install.sh` manually.
 
 ## Fun-ASR Tuning
 
@@ -200,10 +229,15 @@ This file survives app restarts and macOS reboots.
 - `enable_autostart.sh`: enable LaunchAgent autostart
 - `disable_autostart.sh`: disable LaunchAgent autostart
 - `create_launcher.sh`: create clickable `.app` launcher in Applications + Desktop symlink
+- `create_uninstaller.sh`: create graphical uninstaller app in Applications
 - `launch_from_desktop.sh`: desktop launcher entrypoint (silent background startup)
 - `remove_launcher.sh`: remove launcher app + Desktop shortcut symlink
 - `uninstall.sh`: uninstall and cleanup runtime/model/env
 - `prepare_release.sh`: clean artifacts and produce release zip
+- `build_dmg.sh`: build the DMG installer for end users
+- `install_from_dmg.command`: installer entrypoint used inside the DMG app bundle
+- `download_python_runtime.sh`: download and verify the pinned standalone Python runtime for DMG installs
+- `launcher/FunASRLauncher.c`: launcher source that requests TCC and resolves runtime path from Application Support
 - `funasr_nano_runtime/`: bundled Fun-ASR runtime source files (`model.py`, `ctc.py`, `tools/utils.py`) required by `Fun-ASR-Nano-2512`
 
 ### Uninstall behavior
@@ -215,10 +249,11 @@ This file survives app restarts and macOS reboots.
 - `.venv`
 - local logs/locks/runtime config
 - `~/Library/Application Support/SenseVoiceDictation/ui_settings.json` and related config residues
-- launcher apps in Applications/Desktop
+- launcher / uninstaller apps in Applications/Desktop
+- DMG-installed runtime directory under `~/Library/Application Support/FunASRDictation`
 - TCC entries for known app identifiers (best effort reset)
 
-Also supports full source removal:
+Also supports full source or DMG runtime removal:
 
 ```bash
 ./uninstall.sh --delete-project-dir

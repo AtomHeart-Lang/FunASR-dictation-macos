@@ -5,6 +5,7 @@ __pycache__/
 *.log
 *.lock
 *.zip
+*.dmg
 config.toml
 ui_settings.json
 menubar.out.log

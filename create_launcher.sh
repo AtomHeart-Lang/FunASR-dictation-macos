@@ -4,6 +4,7 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="FunASR Dictation"
 LEGACY_APP_NAME="SenseVoice Dictation"
+APP_VERSION="2.0.0"
 APP_BUNDLE="$HOME/Applications/$APP_NAME.app"
 DESKTOP_APP="$HOME/Desktop/$APP_NAME.app"
 LEGACY_APP_BUNDLE="$HOME/Applications/$LEGACY_APP_NAME.app"
@@ -17,8 +18,11 @@ LEGACY_BUNDLE_IDS=(
 )
 APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
 LAUNCHER_IDENTITY_FILE="$APP_SUPPORT_DIR/launcher_identity.sha256"
+RUNTIME_PATH_FILE="$APP_SUPPORT_DIR/runtime_app_dir.txt"
 FORCE_REBUILD=0
 LAUNCHER_BIN="$APP_BUNDLE/Contents/MacOS/FunASRLauncher"
+LAUNCHER_SRC="$APP_DIR/launcher/FunASRLauncher.c"
+LAUNCHER_TEMPLATE_BIN="$APP_DIR/launcher/FunASRLauncher"
 
 for arg in "$@"; do
   case "$arg" in
@@ -53,10 +57,16 @@ launcher_hash() {
   shasum -a 256 "$bin_path" | awk '{print $1}'
 }
 
-if ! command -v clang >/dev/null 2>&1; then
-  echo "[ERROR] clang not found. Install Xcode Command Line Tools first: xcode-select --install"
-  exit 1
-fi
+launcher_supports_runtime_path() {
+  local bin_path="$1"
+  [[ -x "$bin_path" ]] || return 1
+  strings "$bin_path" 2>/dev/null | grep -q "runtime_path_v2"
+}
+
+write_runtime_path_file() {
+  mkdir -p "$APP_SUPPORT_DIR"
+  printf '%s\n' "$APP_DIR" > "$RUNTIME_PATH_FILE"
+}
 
 TMP_DIR="$(mktemp -d /tmp/funasr-launcher.XXXXXX)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -74,6 +84,9 @@ if [[ "$FORCE_REBUILD" -eq 0 && -d "$APP_BUNDLE" && -x "$LAUNCHER_BIN" ]]; then
     "$LSREGISTER" -f "$APP_BUNDLE" >/dev/null 2>&1 || true
   fi
   mkdir -p "$APP_SUPPORT_DIR"
+  if launcher_supports_runtime_path "$LAUNCHER_BIN"; then
+    write_runtime_path_file
+  fi
   current_hash="$(launcher_hash "$LAUNCHER_BIN" || true)"
   saved_hash="$(cat "$LAUNCHER_IDENTITY_FILE" 2>/dev/null || true)"
   if [[ -n "$current_hash" && "$current_hash" != "$saved_hash" ]]; then
@@ -102,9 +115,9 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key>
   <string>$APP_BUNDLE_ID</string>
   <key>CFBundleVersion</key>
-  <string>1.0</string>
+  <string>$APP_VERSION</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
+  <string>$APP_VERSION</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSUIElement</key>
@@ -123,45 +136,19 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-LAUNCH_SRC="$TMP_DIR/launcher_main.m"
-cat > "$LAUNCH_SRC" <<SRC
-#include <stdlib.h>
-#include <ApplicationServices/ApplicationServices.h>
-#include <CoreFoundation/CoreFoundation.h>
-
-static void request_tcc_permissions(void) {
-    // Input Monitoring prompt (ListenEvent).
-    if (!CGPreflightListenEventAccess()) {
-        CGRequestListenEventAccess();
-    }
-    // Accessibility prompt.
-    if (!AXIsProcessTrusted()) {
-        const void *keys[] = { kAXTrustedCheckOptionPrompt };
-        const void *vals[] = { kCFBooleanTrue };
-        CFDictionaryRef options = CFDictionaryCreate(
-            kCFAllocatorDefault,
-            keys,
-            vals,
-            1,
-            &kCFCopyStringDictionaryKeyCallBacks,
-            &kCFTypeDictionaryValueCallBacks
-        );
-        if (options != NULL) {
-            AXIsProcessTrustedWithOptions(options);
-            CFRelease(options);
-        }
-    }
-}
-
-int main(void) {
-    request_tcc_permissions();
-    return system("cd '$APP_DIR' && ./launch_from_desktop.sh >/dev/null 2>&1");
-}
-SRC
-clang "$LAUNCH_SRC" -O2 \
-  -framework ApplicationServices \
-  -framework CoreFoundation \
-  -o "$APP_BUNDLE/Contents/MacOS/FunASRLauncher"
+if [[ -x "$LAUNCHER_TEMPLATE_BIN" ]]; then
+  cp "$LAUNCHER_TEMPLATE_BIN" "$APP_BUNDLE/Contents/MacOS/FunASRLauncher"
+  chmod +x "$APP_BUNDLE/Contents/MacOS/FunASRLauncher"
+elif command -v clang >/dev/null 2>&1 && [[ -f "$LAUNCHER_SRC" ]]; then
+  clang "$LAUNCHER_SRC" -O2 \
+    -framework ApplicationServices \
+    -framework CoreFoundation \
+    -o "$APP_BUNDLE/Contents/MacOS/FunASRLauncher"
+else
+  echo "[ERROR] No bundled launcher binary found and clang is unavailable."
+  echo "Install Xcode Command Line Tools first: xcode-select --install"
+  exit 1
+fi
 
 ICON_SRC="$APP_ICON_PNG"
 if [[ ! -f "$ICON_SRC" ]]; then
@@ -196,6 +183,7 @@ if [[ -x "$LSREGISTER" ]]; then
 fi
 
 mkdir -p "$APP_SUPPORT_DIR"
+write_runtime_path_file
 current_hash="$(launcher_hash "$LAUNCHER_BIN" || true)"
 if [[ -n "$current_hash" ]]; then
   echo "$current_hash" > "$LAUNCHER_IDENTITY_FILE"

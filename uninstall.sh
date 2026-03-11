@@ -7,6 +7,10 @@ LEGACY_LAUNCH_LABEL="com.lee.sensevoice.menubar"
 LAUNCH_DOMAIN="gui/$(id -u)"
 AUTOSTART_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
 AUTOSTART_LOG_DIR="$HOME/Library/Logs/SenseVoiceDictation"
+STANDARD_INSTALL_ROOT="$HOME/Library/Application Support/FunASRDictation"
+STANDARD_INSTALL_APP_DIR="$STANDARD_INSTALL_ROOT/app"
+STANDARD_INSTALL_PYTHON_DIR="$STANDARD_INSTALL_ROOT/python-runtime"
+RUNTIME_PATH_FILE="$AUTOSTART_DIR/runtime_app_dir.txt"
 APP_SUPPORT_UI_SETTINGS="$AUTOSTART_DIR/ui_settings.json"
 APP_SUPPORT_UI_SETTINGS_TMP="$AUTOSTART_DIR/ui_settings.json.tmp"
 APP_SUPPORT_UI_SETTINGS_BROKEN="$AUTOSTART_DIR/ui_settings.json.broken"
@@ -35,6 +39,7 @@ MODEL_DIRS=(
 )
 
 APP_BUNDLE="$HOME/Applications/FunASR Dictation.app"
+UNINSTALLER_APP="$HOME/Applications/Uninstall FunASR Dictation.app"
 DESKTOP_APP="$HOME/Desktop/FunASR Dictation.app"
 LEGACY_APP_BUNDLE="$HOME/Applications/SenseVoice Dictation.app"
 LEGACY_DESKTOP_APP="$HOME/Desktop/SenseVoice Dictation.app"
@@ -67,7 +72,7 @@ pkill -f "[s]tart_menubar_app.sh" >/dev/null 2>&1 || true
 pkill -f "[m]ain.py" >/dev/null 2>&1 || true
 
 echo "[Step] Remove launcher apps"
-rm -rf "$APP_BUNDLE" "$DESKTOP_APP"
+rm -rf "$APP_BUNDLE" "$UNINSTALLER_APP" "$DESKTOP_APP"
 rm -rf "$LEGACY_APP_BUNDLE" "$LEGACY_DESKTOP_APP"
 
 echo "[Step] Remove model cache"
@@ -85,8 +90,12 @@ rm -f "$APP_DIR/menubar.out.log" "$APP_DIR/menubar.err.log"
 rm -f "$APP_DIR"/*.lock
 rm -f "$APP_DIR/ui_settings.json" "$APP_DIR/ui_settings.json.tmp" "$APP_DIR/ui_settings.json.broken"
 rm -f "$APP_DIR/config.toml"
+rm -f "$RUNTIME_PATH_FILE"
 rm -f "$APP_SUPPORT_UI_SETTINGS" "$APP_SUPPORT_UI_SETTINGS_TMP" "$APP_SUPPORT_UI_SETTINGS_BROKEN"
 rm -rf "$AUTOSTART_DIR" "$AUTOSTART_LOG_DIR"
+rm -rf "$STANDARD_INSTALL_PYTHON_DIR"
+rm -f "$STANDARD_INSTALL_ROOT/install.log"
+rmdir "$STANDARD_INSTALL_ROOT" >/dev/null 2>&1 || true
 rm -f /tmp/sensevoice_menubar.log /tmp/sensevoice_menubar_debug.log
 
 echo "[Step] Reset TCC permissions (best effort)"
@@ -100,6 +109,11 @@ if [[ "$DELETE_DIR" -eq 1 ]]; then
   echo "[Step] Remove project directory"
   cd "$(dirname "$APP_DIR")"
   rm -rf "$APP_DIR"
+  if [[ "$STANDARD_INSTALL_APP_DIR" != "$APP_DIR" ]]; then
+    rm -rf "$STANDARD_INSTALL_APP_DIR"
+  fi
+  rm -rf "$STANDARD_INSTALL_PYTHON_DIR"
+  rm -rf "$STANDARD_INSTALL_ROOT"
 fi
 
 echo "[Done] Uninstall completed."

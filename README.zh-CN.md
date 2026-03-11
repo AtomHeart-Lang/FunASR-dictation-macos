@@ -22,17 +22,44 @@ FunASR Dictation 是一个基于 [Fun-ASR-Nano-2512](https://github.com/FunAudio
 - 支持在菜单中开关系统开机自启（`Enable Launch At Login`）
 - 支持在菜单中开关“应用启动时自动开启听写”（`Enable Dictation On App Start`）
 - 在 `~/Applications` 生成可点击启动器
+- 在 `~/Applications` 生成图形化卸载器
 - 桌面快捷方式是同一应用的符号链接（避免重复权限条目）
+- 支持打包为 DMG，方便普通用户安装（安装时下载独立 Python、依赖和最新模型）
 - 一键卸载并清理环境
 
 ## 环境要求
 
 - macOS 11+
-- Python 3.11+（若缺失，安装脚本会在检测到 Homebrew 时自动安装）
-- Xcode Command Line Tools（用于构建启动器，需要 `clang`）
+- Python 3.11+（仅源码安装 `./install.sh` 需要）
+- Xcode Command Line Tools（仅源码安装且没有内置 launcher 二进制时，才需要 `clang`）
 
 可选：
 - `ffmpeg`（当前流程不是必需）
+
+## DMG 安装
+
+DMG 安装器面向普通用户：
+- DMG 本身不包含模型缓存
+- 不需要 Homebrew，也不需要系统预装 Python
+- 安装过程中会下载独立 Python runtime、Python 依赖和最新版模型
+- 程序运行文件会复制到 `~/Library/Application Support/FunASRDictation/app`
+- 独立 Python runtime 会放在 `~/Library/Application Support/FunASRDictation/python-runtime`
+- 最终可点击应用会生成在 `~/Applications/FunASR Dictation.app`
+- 同时会生成 `~/Applications/Uninstall FunASR Dictation.app` 图形化卸载器
+
+本地构建安装用 DMG：
+
+```bash
+./build_dmg.sh
+```
+
+产物：
+
+```bash
+./funasr-dictation-installer-2.0.0.dmg
+```
+
+打开 DMG 后，双击 `Install FunASR Dictation.app` 即可。安装器会打开终端，下载独立 Python runtime、安装依赖、下载最新模型，然后基于本项目稳定的 TCC 身份重建最终启动器。
 
 ## 安装
 
@@ -60,6 +87,8 @@ FunASR Dictation 是一个基于 [Fun-ASR-Nano-2512](https://github.com/FunAudio
 ```
 
 也可以在执行 `./create_launcher.sh` 后，直接双击应用/桌面图标启动。
+
+如果使用 DMG 安装，请直接双击 DMG 内的 `Install FunASR Dictation.app`，不需要手动执行 `install.sh`。
 
 ## Fun-ASR 调参
 
@@ -200,10 +229,15 @@ batch_size_s = 0
 - `enable_autostart.sh`：启用 LaunchAgent 开机自启
 - `disable_autostart.sh`：关闭 LaunchAgent 开机自启
 - `create_launcher.sh`：创建 Applications 启动器 + 桌面符号链接
+- `create_uninstaller.sh`：创建 Applications 图形化卸载器
 - `launch_from_desktop.sh`：桌面启动入口（静默后台启动）
 - `remove_launcher.sh`：删除 Applications 启动器与桌面快捷方式
 - `uninstall.sh`：卸载并清理运行环境/模型/虚拟环境
 - `prepare_release.sh`：清理产物并打包发布 zip
+- `build_dmg.sh`：构建给终端用户使用的 DMG 安装包
+- `install_from_dmg.command`：DMG 内部使用的安装入口脚本
+- `download_python_runtime.sh`：为 DMG 安装下载并校验固定版本的独立 Python runtime
+- `launcher/FunASRLauncher.c`：launcher 源码，负责申请 TCC 权限并从 Application Support 读取真实运行目录
 - `funasr_nano_runtime/`：内置 Fun-ASR 运行时代码（`model.py`、`ctc.py`、`tools/utils.py`），`Fun-ASR-Nano-2512` 必需
 
 ### 卸载行为
@@ -215,10 +249,11 @@ batch_size_s = 0
 - `.venv`
 - 本地日志/锁文件/运行配置
 - `~/Library/Application Support/SenseVoiceDictation/ui_settings.json` 及相关配置残留
-- Applications/桌面启动器
+- Applications/桌面启动器与图形化卸载器
+- `~/Library/Application Support/FunASRDictation` 下的 DMG 安装运行目录
 - 已知应用标识的 TCC 权限项（尽力重置）
 
-也支持连源码目录一起删除：
+也支持连源码目录或 DMG 运行目录一起删除：
 
 ```bash
 ./uninstall.sh --delete-project-dir
