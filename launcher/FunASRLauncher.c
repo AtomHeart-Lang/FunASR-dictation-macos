@@ -1,9 +1,11 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <errno.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 static const char *kLauncherMarker = "runtime_path_v2";
@@ -83,6 +85,25 @@ int main(void) {
         return 3;
     }
 
-    execl("/bin/bash", "/bin/bash", "./launch_from_desktop.sh", (char *)NULL);
-    return 4;
+    pid_t child = fork();
+    if (child < 0) {
+        return 4;
+    }
+    if (child == 0) {
+        execl("/bin/bash", "/bin/bash", "./launch_from_desktop.sh", (char *)NULL);
+        _exit(5);
+    }
+
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0) {
+        if (errno == EINTR) {
+            continue;
+        }
+        return 6;
+    }
+
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    }
+    return 7;
 }
