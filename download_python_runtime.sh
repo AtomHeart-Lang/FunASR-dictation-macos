@@ -11,7 +11,7 @@ VERSION="3.11.15+20260303"
 emit_progress() {
   local percent="$1"
   shift
-  echo "[Progress] $percent $*"
+  echo "[Progress] $percent $*" >&2
 }
 
 pick_asset() {
