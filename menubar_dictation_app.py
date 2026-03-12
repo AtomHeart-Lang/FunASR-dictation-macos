@@ -295,7 +295,7 @@ I18N = {
         "zh": "当前触发方式：{mode}\n键盘快捷键：{hotkey}\n鼠标按键：{mouse}\n\n建议：先设置按键，再切换触发方式。",
         "en": "Current trigger mode: {mode}\nKeyboard hotkey: {hotkey}\nMouse button: {mouse}\n\nTip: set keys first, then choose trigger mode.",
     },
-    "hotkey_dialog_section_mode": {"zh": "触发方式", "en": "Trigger Mode"},
+    "hotkey_dialog_section_mode": {"zh": "触发方式（单选）", "en": "Trigger Mode (single choice)"},
     "hotkey_dialog_section_current": {"zh": "当前设置", "en": "Current Setup"},
     "hotkey_settings_mode_label": {"zh": "触发方式（单选）", "en": "Trigger Mode (single choice)"},
     "hotkey_settings_keyboard_line": {"zh": "键盘快捷键：{value}", "en": "Keyboard Hotkey: {value}"},
@@ -303,10 +303,6 @@ I18N = {
     "hotkey_dialog_choice_hint": {
         "zh": "推荐优先尝试自动识别；如果没识别到，再手动输入。",
         "en": "Try capture first. If it misses your key/button, switch to manual entry.",
-    },
-    "hotkey_dialog_manual_hint": {
-        "zh": "支持先输入再保存，文本格式可参考文档中的按键列表。",
-        "en": "Type the trigger text directly, then save it in one step.",
     },
     "hotkey_settings_tip_compact": {"zh": "建议：先编辑按键，再保存触发方式。", "en": "Tip: edit keys first, then save trigger mode."},
     "hotkey_settings_btn_edit_keyboard": {"zh": "编辑键盘", "en": "Edit Keyboard"},
@@ -633,41 +629,32 @@ def ui_hotkey_settings_action(
     alert.setMessageText_(tr("menu_hotkey_settings"))
     alert.setInformativeText_("")
     _configure_alert_icon(alert, size=50.0)
-    palette = _dialog_palette()
     sections = build_hotkey_settings_sections()
     actions = build_hotkey_settings_actions()
 
     panel_w = 332
-    panel_h = 212
+    panel_h = 188
     panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, panel_w, panel_h))
 
-    mode_card = _make_dialog_card(panel, 10, 126, panel_w - 20, 76, tr(sections[0].title_key))
-    mode_hint = _make_dialog_text(
-        NSMakeRect(16, 34, panel_w - 52, 14),
-        tr("hotkey_settings_mode_label"),
-        NSFont.systemFontOfSize_(10),
-        color=palette["secondary"],
-        align=NSTextAlignmentCenter,
-    )
-    mode_card.addSubview_(mode_hint)
+    mode_card = _make_dialog_card(panel, 10, 108, panel_w - 20, 70, tr(sections[0].title_key))
 
-    radio_keyboard = NSButton.alloc().initWithFrame_(NSMakeRect(54, 24, 88, 20))
+    radio_keyboard = NSButton.alloc().initWithFrame_(NSMakeRect(54, 20, 88, 20))
     radio_keyboard.setButtonType_(NSRadioButton)
     radio_keyboard.setTitle_(tr("mode_keyboard"))
     radio_keyboard.setState_(NSControlStateValueOn if mode_value == "keyboard" else 0)
     mode_card.addSubview_(radio_keyboard)
 
-    radio_mouse = NSButton.alloc().initWithFrame_(NSMakeRect(186, 24, 88, 20))
+    radio_mouse = NSButton.alloc().initWithFrame_(NSMakeRect(186, 20, 88, 20))
     radio_mouse.setButtonType_(NSRadioButton)
     radio_mouse.setTitle_(tr("mode_mouse"))
     radio_mouse.setState_(NSControlStateValueOn if mode_value == "mouse" else 0)
     mode_card.addSubview_(radio_mouse)
 
-    current_card = _make_dialog_card(panel, 10, 12, panel_w - 20, 102, tr(sections[1].title_key))
+    current_card = _make_dialog_card(panel, 10, 12, panel_w - 20, 84, tr(sections[1].title_key))
     keyboard_line = _make_dialog_text(
-        NSMakeRect(16, 36, panel_w - 52, 22),
+        NSMakeRect(16, 34, panel_w - 52, 18),
         "",
-        NSFont.boldSystemFontOfSize_(15),
+        NSFont.boldSystemFontOfSize_(13),
         align=NSTextAlignmentCenter,
     )
     keyboard_line.setStringValue_(tr("hotkey_settings_keyboard_line", value=hotkey))
@@ -676,20 +663,11 @@ def ui_hotkey_settings_action(
     mouse_line = _make_dialog_text(
         NSMakeRect(16, 14, panel_w - 52, 18),
         "",
-        NSFont.boldSystemFontOfSize_(15),
+        NSFont.boldSystemFontOfSize_(13),
         align=NSTextAlignmentCenter,
     )
     mouse_line.setStringValue_(tr("hotkey_settings_mouse_line", value=mouse_value))
     current_card.addSubview_(mouse_line)
-
-    current_hint = _make_dialog_text(
-        NSMakeRect(16, 60, panel_w - 52, 12),
-        tr("hotkey_dialog_manual_hint"),
-        NSFont.systemFontOfSize_(10),
-        color=palette["secondary"],
-        align=NSTextAlignmentCenter,
-    )
-    current_card.addSubview_(current_hint)
 
     alert.setAccessoryView_(panel)
     for action in actions:
@@ -1032,14 +1010,12 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         alert = NSAlert.alloc().init()
         alert.setMessageText_(tr("model_config_title"))
         alert.setInformativeText_(tr("model_config_intro"))
-        icon = _app_icon_image(rounded=True)
-        if icon is not None:
-            alert.setIcon_(icon)
+        _configure_alert_icon(alert, size=50.0)
         alert.addButtonWithTitle_(tr("save"))
         alert.addButtonWithTitle_(tr("cancel"))
 
         sections = build_model_config_sections()
-        panel_w = 500
+        panel_w = 448
         panel_h = 676
         card_x = 12
         card_w = panel_w - 24
@@ -1131,8 +1107,8 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
             cursor_y = section_h - 70
 
             if section.key == "core":
-                label_w = 150
-                field_x = 176
+                label_w = 120
+                field_x = 140
                 field_w = card_w - field_x - 16
                 for item in section.items:
                     title = make_text(

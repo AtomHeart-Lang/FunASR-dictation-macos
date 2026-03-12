@@ -181,7 +181,7 @@ static NSString *SanitizeOutput(NSString *value) {
                                       font:[NSFont boldSystemFontOfSize:26]];
     [content addSubview:self.titleLabel];
 
-    self.statusLabel = [self wrappingLabelWithFrame:NSMakeRect(132, 448, 540, 36)
+    self.statusLabel = [self wrappingLabelWithFrame:NSMakeRect(132, 440, 540, 44)
                                                text:[self initialStatus]
                                                font:[NSFont systemFontOfSize:15 weight:NSFontWeightMedium]];
     [content addSubview:self.statusLabel];
@@ -453,8 +453,8 @@ static NSString *SanitizeOutput(NSString *value) {
             self.secondaryActionButton.hidden = NO;
             self.secondaryActionButton.enabled = YES;
             self.statusLabel.stringValue = Localized(
-                @"安装已完成。桌面快捷方式默认不创建；如需创建，可点击下方按钮。卸载时可能需要手动删除该快捷方式。",
-                @"Installation completed. Desktop shortcut creation is optional; use the button below if you want one. macOS may require manual deletion of the shortcut during uninstall."
+                @"安装已完成。桌面快捷方式默认不创建；如需创建，可点击下方按钮。",
+                @"Installation completed. Desktop shortcut is optional. Use the button below if you want to create it."
             );
         }
         [self presentPendingWarningsIfNeeded];
