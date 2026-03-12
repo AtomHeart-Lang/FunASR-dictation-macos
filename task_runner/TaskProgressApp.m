@@ -51,6 +51,7 @@ static NSString *SanitizeOutput(NSString *value) {
 @property(nonatomic, strong) NSTask *task;
 @property(nonatomic, strong) NSPipe *pipe;
 @property(nonatomic, strong) NSMutableString *partialLine;
+@property(nonatomic, strong) NSMutableArray<NSDictionary *> *pendingWarnings;
 @property(nonatomic, assign) BOOL sawProgress;
 @property(nonatomic, assign) BOOL finished;
 @end
@@ -69,6 +70,7 @@ static NSString *SanitizeOutput(NSString *value) {
     }
 
     self.partialLine = [NSMutableString string];
+    self.pendingWarnings = [NSMutableArray array];
     [self buildWindow];
     [NSApp activateIgnoringOtherApps:YES];
 
@@ -271,7 +273,9 @@ static NSString *SanitizeOutput(NSString *value) {
 - (void)startTask {
     NSString *scriptPath = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:self.config.scriptRelativePath];
     if (![[NSFileManager defaultManager] isReadableFileAtPath:scriptPath]) {
-        [self appendLog:[NSString stringWithFormat:@"[ERROR] Missing task script: %@\n", scriptPath]];
+        [self appendLog:[NSString stringWithFormat:@"[ERROR] %@\n",
+                         Localized([NSString stringWithFormat:@"缺少任务脚本：%@", scriptPath],
+                                   [NSString stringWithFormat:@"Missing task script: %@", scriptPath])]];
         [self finishWithStatus:1];
         return;
     }
@@ -308,7 +312,8 @@ static NSString *SanitizeOutput(NSString *value) {
 
     NSError *error = nil;
     if (![self.task launchAndReturnError:&error]) {
-        [self appendLog:[NSString stringWithFormat:@"[ERROR] %@\n", error.localizedDescription ?: @"Failed to launch task"]];
+        NSString *fallback = Localized(@"无法启动任务。", @"Failed to launch task.");
+        [self appendLog:[NSString stringWithFormat:@"[ERROR] %@\n", error.localizedDescription ?: fallback]];
         [self finishWithStatus:1];
         return;
     }
@@ -367,12 +372,35 @@ static NSString *SanitizeOutput(NSString *value) {
         self.statusLabel.stringValue = [line substringFromIndex:8];
         return;
     }
+    if ([line hasPrefix:@"[WARN_CODE] "]) {
+        [self handleWarningCode:[line substringFromIndex:12]];
+        return;
+    }
     if ([line hasPrefix:@"[WARN] "]) {
         self.statusLabel.stringValue = [line substringFromIndex:7];
         return;
     }
     if ([line hasPrefix:@"[Done]"]) {
         [self updateProgress:100 message:[self successStatus]];
+    }
+}
+
+- (void)handleWarningCode:(NSString *)payload {
+    NSArray<NSString *> *parts = [payload componentsSeparatedByString:@"|"];
+    if (parts.count == 0) {
+        return;
+    }
+    NSString *code = parts[0];
+    NSString *argument = parts.count > 1 ? parts[1] : @"";
+    if ([code isEqualToString:@"DESKTOP_SHORTCUT_MANUAL_REMOVE"]) {
+        [self.pendingWarnings addObject:@{
+            @"code": code,
+            @"path": argument ?: @""
+        }];
+        self.statusLabel.stringValue = Localized(
+            @"卸载已完成，但桌面快捷方式需要你手动删除。",
+            @"Uninstall completed, but the Desktop shortcut needs to be removed manually."
+        );
     }
 }
 
@@ -429,12 +457,37 @@ static NSString *SanitizeOutput(NSString *value) {
                 @"Installation completed. Desktop shortcut creation is optional; use the button below if you want one. macOS may require manual deletion of the shortcut during uninstall."
             );
         }
+        [self presentPendingWarningsIfNeeded];
     } else {
         if (self.progressBar.doubleValue < 100) {
             self.progressBar.doubleValue = MAX(self.progressBar.doubleValue, 1);
         }
         self.statusLabel.stringValue = [self failureStatus];
         [self appendLog:[NSString stringWithFormat:@"[ERROR] %@\n", [self failureStatus]]];
+    }
+}
+
+- (void)presentPendingWarningsIfNeeded {
+    if (self.pendingWarnings.count == 0) {
+        return;
+    }
+    for (NSDictionary<NSString *, NSString *> *warning in self.pendingWarnings) {
+        NSString *code = warning[@"code"] ?: @"";
+        if ([code isEqualToString:@"DESKTOP_SHORTCUT_MANUAL_REMOVE"]) {
+            NSString *path = warning[@"path"] ?: @"";
+            NSString *message = Localized(
+                [NSString stringWithFormat:@"卸载已经完成，但桌面快捷方式无法自动删除。\n\n请手动从桌面删除以下快捷方式：\n%@",
+                 path.length > 0 ? path : @"~/Desktop/FunASR Dictation.app"],
+                [NSString stringWithFormat:@"Uninstall completed, but the Desktop shortcut could not be removed automatically.\n\nPlease delete this shortcut manually from Desktop:\n%@",
+                 path.length > 0 ? path : @"~/Desktop/FunASR Dictation.app"]
+            );
+            NSAlert *alert = [[NSAlert alloc] init];
+            alert.alertStyle = NSAlertStyleWarning;
+            alert.messageText = Localized(@"请手动删除桌面快捷方式", @"Manual Desktop Shortcut Removal Required");
+            alert.informativeText = message;
+            [alert addButtonWithTitle:Localized(@"我知道了", @"OK")];
+            [alert runModal];
+        }
     }
 }
 

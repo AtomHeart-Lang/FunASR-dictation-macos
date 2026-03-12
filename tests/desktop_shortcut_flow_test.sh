@@ -105,7 +105,7 @@ run_uninstall_warning_test() {
 
   log_file="$tmp_home/uninstall.log"
   set +e
-  HOME="$tmp_home" "$tmp_app/uninstall.sh" >"$log_file" 2>&1
+  HOME="$tmp_home" LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 "$tmp_app/uninstall.sh" >"$log_file" 2>&1
   exit_code=$?
   set -e
 
@@ -115,8 +115,53 @@ run_uninstall_warning_test() {
   assert_contains "$log_file" "[Done] Uninstall completed."
 }
 
+run_uninstall_warning_localization_test() {
+  local tmp_home tmp_app zh_log en_log exit_code
+  tmp_home="$(mktemp -d /tmp/funasr-test-home.XXXXXX)"
+  tmp_app="$(mktemp -d /tmp/funasr-test-app.XXXXXX)"
+  trap 'chmod 755 "$tmp_home/Desktop" >/dev/null 2>&1 || true; rm -rf "$tmp_home" "$tmp_app"' RETURN
+
+  mkdir -p \
+    "$tmp_home/Applications" \
+    "$tmp_home/Desktop" \
+    "$tmp_home/Library/Application Support/FunASRDictation" \
+    "$tmp_home/Library/Application Support/SenseVoiceDictation" \
+    "$tmp_home/Library/LaunchAgents"
+  mkdir -p "$tmp_home/Applications/FunASR Dictation.app"
+  mkdir -p "$tmp_home/Applications/Uninstall FunASR Dictation.app"
+  cp "$UNINSTALL_SCRIPT" "$tmp_app/uninstall.sh"
+  chmod +x "$tmp_app/uninstall.sh"
+
+  ln -s "$tmp_home/Applications/FunASR Dictation.app" "$tmp_home/Desktop/FunASR Dictation.app"
+  chmod 555 "$tmp_home/Desktop"
+
+  zh_log="$tmp_home/uninstall-zh.log"
+  set +e
+  HOME="$tmp_home" LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 "$tmp_app/uninstall.sh" >"$zh_log" 2>&1
+  exit_code=$?
+  set -e
+  [[ "$exit_code" -eq 0 ]] || fail "Expected localized uninstall (zh) to succeed, got exit $exit_code"
+  assert_contains "$zh_log" "桌面快捷方式无法自动删除"
+  assert_contains "$zh_log" "请手动从桌面删除"
+
+  chmod 755 "$tmp_home/Desktop"
+  rm -f "$tmp_home/Desktop/FunASR Dictation.app"
+  ln -s "$tmp_home/Applications/FunASR Dictation.app" "$tmp_home/Desktop/FunASR Dictation.app"
+  chmod 555 "$tmp_home/Desktop"
+
+  en_log="$tmp_home/uninstall-en.log"
+  set +e
+  HOME="$tmp_home" LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 "$tmp_app/uninstall.sh" >"$en_log" 2>&1
+  exit_code=$?
+  set -e
+  [[ "$exit_code" -eq 0 ]] || fail "Expected localized uninstall (en) to succeed, got exit $exit_code"
+  assert_contains "$en_log" "Desktop shortcut could not be removed automatically"
+  assert_contains "$en_log" "Please delete it manually from Desktop."
+}
+
 run_create_launcher_default_test
 run_create_desktop_shortcut_opt_in_test
 run_uninstall_warning_test
+run_uninstall_warning_localization_test
 
 echo "[PASS] desktop shortcut flow"

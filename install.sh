@@ -24,6 +24,22 @@ WITH_MODEL=1
 WITH_LAUNCHER=1
 WITH_AUTOSTART=0
 
+is_chinese_locale() {
+  local locale="${LC_ALL:-${LC_MESSAGES:-${LANG:-${AppleLocale:-}}}}"
+  locale="$(printf '%s' "$locale" | tr '[:upper:]' '[:lower:]')"
+  [[ "$locale" == zh* ]]
+}
+
+localize() {
+  local zh="$1"
+  local en="$2"
+  if is_chinese_locale; then
+    printf '%s\n' "$zh"
+  else
+    printf '%s\n' "$en"
+  fi
+}
+
 emit_progress() {
   local percent="$1"
   shift
@@ -72,8 +88,8 @@ if [[ -z "$PYTHON_BIN" ]] && command -v python3 >/dev/null 2>&1 && python_ok "$(
 fi
 
 if [[ -z "$PYTHON_BIN" ]]; then
-  emit_progress 10 "Python 3.11+ not found, trying Homebrew"
-  echo "[Step] Python 3.11+ not found. Trying to install via Homebrew."
+  emit_progress 10 "$(localize "未找到 Python 3.11+，尝试通过 Homebrew 安装" "Python 3.11+ not found, trying Homebrew")"
+  echo "[Step] $(localize "未找到 Python 3.11+，尝试通过 Homebrew 安装。" "Python 3.11+ not found. Trying to install via Homebrew.")"
   if ! command -v brew >/dev/null 2>&1; then
     echo "[ERROR] Homebrew is required for automatic Python installation."
     echo "Install Homebrew first: https://brew.sh"
@@ -109,26 +125,26 @@ print('[OK] Python version:', sys.version.split()[0])
 PY
 
 if [[ ! -d .venv ]]; then
-  emit_progress 40 "Creating Python virtual environment"
-  echo "[Step] Creating virtual environment (.venv)"
+  emit_progress 40 "$(localize "创建 Python 虚拟环境" "Creating Python virtual environment")"
+  echo "[Step] $(localize "创建虚拟环境 (.venv)" "Creating virtual environment (.venv)")"
   "$PYTHON_BIN" -m venv .venv
 fi
 
 source .venv/bin/activate
 
-emit_progress 48 "Installing Python dependencies"
-echo "[Step] Installing Python dependencies"
+emit_progress 48 "$(localize "安装 Python 依赖" "Installing Python dependencies")"
+echo "[Step] $(localize "安装 Python 依赖" "Installing Python dependencies")"
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r requirements.txt
 
 if [[ ! -f config.toml ]]; then
   cp config.example.toml config.toml
-  echo "[Step] Created config.toml from template"
+  echo "[Step] $(localize "已从模板创建 config.toml" "Created config.toml from template")"
 fi
 
 if [[ "$WITH_MODEL" -eq 1 ]]; then
-  emit_progress 68 "Downloading latest model files"
-  echo "[Step] Downloading/refreshing Fun-ASR-Nano-2512 model cache"
+  emit_progress 68 "$(localize "下载最新模型文件" "Downloading latest model files")"
+  echo "[Step] $(localize "下载/刷新 Fun-ASR-Nano-2512 模型缓存" "Downloading/refreshing Fun-ASR-Nano-2512 model cache")"
 FUNASR_RUNTIME_DIR="$APP_DIR/funasr_nano_runtime"
 if [[ ! -f "$FUNASR_RUNTIME_DIR/model.py" ]]; then
   echo "[ERROR] Missing runtime file: $FUNASR_RUNTIME_DIR/model.py"
@@ -172,21 +188,21 @@ PY
 fi
 
 if [[ "$WITH_LAUNCHER" -eq 1 ]]; then
-  emit_progress 86 "Creating launcher app"
-  echo "[Step] Creating clickable launcher app"
+  emit_progress 86 "$(localize "创建应用启动器" "Creating launcher app")"
+  echo "[Step] $(localize "创建可点击的应用启动器" "Creating clickable launcher app")"
   ./create_launcher.sh
 fi
 
-emit_progress 92 "Creating graphical uninstaller"
-echo "[Step] Creating graphical uninstaller"
+emit_progress 92 "$(localize "创建图形化卸载器" "Creating graphical uninstaller")"
+echo "[Step] $(localize "创建图形化卸载器" "Creating graphical uninstaller")"
 ./create_uninstaller.sh
 
 if [[ "$WITH_AUTOSTART" -eq 1 ]]; then
-  emit_progress 96 "Enabling launch at login"
-  echo "[Step] Enabling autostart"
+  emit_progress 96 "$(localize "启用开机自动启动" "Enabling launch at login")"
+  echo "[Step] $(localize "启用开机自动启动" "Enabling autostart")"
   ./enable_autostart.sh
 fi
 
-emit_progress 100 "Installation completed"
-echo "[Done] Installation completed."
-echo "Run: ./start_app.sh"
+emit_progress 100 "$(localize "安装已完成" "Installation completed")"
+echo "[Done] $(localize "安装已完成。" "Installation completed.")"
+echo "$(localize "运行：./start_app.sh" "Run: ./start_app.sh")"
