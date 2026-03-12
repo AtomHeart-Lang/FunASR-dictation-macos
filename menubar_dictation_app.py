@@ -199,10 +199,7 @@ I18N = {
     "status_error": {"zh": "错误", "en": "ERROR"},
     "invalid_model_config_title": {"zh": "模型参数无效", "en": "Invalid Model Config"},
     "model_config_title": {"zh": "模型参数设置", "en": "Model Config"},
-    "model_config_intro": {
-        "zh": "使用易懂选项来调整识别表现（保存后下次录音生效）",
-        "en": "Tune dictation behavior with plain-language options (applies from next recording)",
-    },
+    "model_config_intro": {"zh": "", "en": ""},
     "model_config_hint": {
         "zh": "推荐：语言=auto，数字/日期规范化=开，长停顿合并=关；专有词写入高频词。",
         "en": "Recommended: language=auto, normalize numbers/dates=ON, merge long pauses=OFF; add domain words in Hot Words.",
@@ -645,27 +642,27 @@ def ui_hotkey_settings_action(
     sections = build_hotkey_settings_sections()
     actions = build_hotkey_settings_actions()
 
-    panel_w = 304
-    panel_h = 180
+    panel_w = 286
+    panel_h = 172
     panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, panel_w, panel_h))
 
-    mode_card = _make_dialog_card(panel, 10, 102, panel_w - 20, 68, tr(sections[0].title_key))
+    mode_card = _make_dialog_card(panel, 12, 98, panel_w - 24, 64, tr(sections[0].title_key))
 
-    radio_keyboard = NSButton.alloc().initWithFrame_(NSMakeRect(42, 18, 80, 20))
+    radio_keyboard = NSButton.alloc().initWithFrame_(NSMakeRect(36, 16, 78, 20))
     radio_keyboard.setButtonType_(NSRadioButton)
     radio_keyboard.setTitle_(tr("mode_keyboard"))
     radio_keyboard.setState_(NSControlStateValueOn if mode_value == "keyboard" else 0)
     mode_card.addSubview_(radio_keyboard)
 
-    radio_mouse = NSButton.alloc().initWithFrame_(NSMakeRect(164, 18, 80, 20))
+    radio_mouse = NSButton.alloc().initWithFrame_(NSMakeRect(150, 16, 78, 20))
     radio_mouse.setButtonType_(NSRadioButton)
     radio_mouse.setTitle_(tr("mode_mouse"))
     radio_mouse.setState_(NSControlStateValueOn if mode_value == "mouse" else 0)
     mode_card.addSubview_(radio_mouse)
 
-    current_card = _make_dialog_card(panel, 10, 12, panel_w - 20, 76, tr(sections[1].title_key))
+    current_card = _make_dialog_card(panel, 12, 12, panel_w - 24, 70, tr(sections[1].title_key))
     keyboard_line = _make_dialog_text(
-        NSMakeRect(18, 32, panel_w - 56, 16),
+        NSMakeRect(16, 30, panel_w - 56, 16),
         "",
         NSFont.systemFontOfSize_(13),
         align=NSTextAlignmentLeft,
@@ -674,7 +671,7 @@ def ui_hotkey_settings_action(
     current_card.addSubview_(keyboard_line)
 
     mouse_line = _make_dialog_text(
-        NSMakeRect(18, 14, panel_w - 56, 16),
+        NSMakeRect(16, 14, panel_w - 56, 16),
         "",
         NSFont.systemFontOfSize_(13),
         align=NSTextAlignmentLeft,
@@ -1029,10 +1026,10 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         alert.addButtonWithTitle_(tr("cancel"))
 
         sections = build_model_config_sections()
-        panel_w = 436
+        panel_w = 430
         panel_h = 676
-        card_x = 12
-        card_w = panel_w - 24
+        card_x = 24
+        card_w = panel_w - 48
         section_heights = {
             "core": 284,
             "text": 214,
@@ -1121,9 +1118,9 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
             cursor_y = section_h - 70
 
             if section.key == "core":
-                label_w = 124
+                label_w = 114
                 field_x = 144
-                field_w = min(236, card_w - field_x - 16)
+                field_w = min(208, card_w - field_x - 16)
                 for item in section.items:
                     title = make_text(
                         NSMakeRect(16, cursor_y + 8, label_w, 18),
