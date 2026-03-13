@@ -1153,7 +1153,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         title_label = make_text(
             NSMakeRect(layout.title_x, layout.title_y, layout.title_w, layout.title_h),
             tr("model_config_title"),
-            NSFont.boldSystemFontOfSize_(17),
+            NSFont.boldSystemFontOfSize_(layout.title_font_size),
         )
         panel.addSubview_(title_label)
 
@@ -1173,7 +1173,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
                     title = make_text(
                         NSMakeRect(16, cursor_y + 8, label_w, 18),
                         tr(item.label_key),
-                        NSFont.boldSystemFontOfSize_(14),
+                        NSFont.boldSystemFontOfSize_(layout.field_label_font_size),
                     )
                     card.addSubview_(title)
                     field = make_input(card, field_x, cursor_y, field_w, state[item.key])
@@ -1211,7 +1211,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
                 title = make_text(
                     NSMakeRect(16, cursor_y + 6, card_w - 32, 18),
                     tr(item.label_key),
-                    NSFont.boldSystemFontOfSize_(14),
+                    NSFont.boldSystemFontOfSize_(layout.field_label_font_size),
                 )
                 card.addSubview_(title)
                 cursor_y -= 22

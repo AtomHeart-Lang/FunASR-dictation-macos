@@ -30,8 +30,10 @@ class ModelConfigDialogLayout:
     title_y: int
     title_w: int
     title_h: int
+    title_font_size: int
     core_label_w: int
     core_field_x: int
+    field_label_font_size: int
     core_help_x: int
     toggle_help_x: int
 
@@ -104,22 +106,20 @@ def build_model_config_sections() -> Tuple[ModelConfigSection, ...]:
 
 
 def build_model_config_dialog_layout() -> ModelConfigDialogLayout:
-    panel_w = 500
+    panel_w = 476
     panel_h = 790
 
-    # NSAlert accessory views render with a slightly wider trailing gutter than
-    # the leading side. Compensate inside the panel so the visible cards read
-    # as centered in the full dialog window, not just inside the accessory view.
-    card_left_inset = 40
-    card_right_inset = 20
+    card_left_inset = 28
+    card_right_inset = 28
     card_w = panel_w - card_left_inset - card_right_inset
 
     icon_size = 52
     icon_x = 28
     icon_y = panel_h - 76
 
-    title_h = 24
-    title_x = 100
+    title_font_size = 16
+    title_h = 22
+    title_x = 96
     title_y = icon_y + (icon_size - title_h) // 2
     title_w = panel_w - title_x - 20
 
@@ -135,8 +135,10 @@ def build_model_config_dialog_layout() -> ModelConfigDialogLayout:
         title_y=title_y,
         title_w=title_w,
         title_h=title_h,
+        title_font_size=title_font_size,
         core_label_w=128,
-        core_field_x=160,
+        core_field_x=152,
+        field_label_font_size=13,
         core_help_x=44,
         toggle_help_x=44,
     )
