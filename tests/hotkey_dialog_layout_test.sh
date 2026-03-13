@@ -9,6 +9,7 @@ repo_dir = Path("/Volumes/SATA-DATA/SynologyDrive/codex/SenseVoiceDictation/sens
 sys.path.insert(0, str(repo_dir))
 
 from hotkey_dialog_layout import (
+    build_hotkey_dialog_geometry,
     build_hotkey_settings_actions,
     build_hotkey_settings_sections,
 )
@@ -28,6 +29,13 @@ actions = build_hotkey_settings_actions()
 assert [action.key for action in actions] == ["set_keyboard", "set_mouse", "save"], actions
 assert [action.label_key for action in actions] == ["menu_set_hotkey", "menu_set_mouse", "save"]
 assert actions[-1].emphasis == "primary"
+
+geometry = build_hotkey_dialog_geometry()
+assert geometry.panel_w == 278
+assert geometry.current_card_h == 72
+assert geometry.current_keyboard_y == 22
+assert geometry.current_mouse_y == 6
+assert geometry.current_title_bottom - (geometry.current_keyboard_y + 16) >= 4
 
 print("[PASS] hotkey dialog layout")
 PY

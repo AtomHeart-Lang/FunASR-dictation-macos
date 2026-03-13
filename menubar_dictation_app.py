@@ -51,7 +51,11 @@ from AppKit import (
 )
 from Foundation import NSBundle, NSDate, NSLocale, NSRunLoop
 from pynput import keyboard, mouse
-from hotkey_dialog_layout import build_hotkey_settings_actions, build_hotkey_settings_sections
+from hotkey_dialog_layout import (
+    build_hotkey_dialog_geometry,
+    build_hotkey_settings_actions,
+    build_hotkey_settings_sections,
+)
 from model_config_layout import build_model_config_dialog_layout, build_model_config_sections
 
 try:
@@ -654,12 +658,20 @@ def ui_hotkey_settings_action(
     _configure_alert_icon(alert, size=50.0)
     sections = build_hotkey_settings_sections()
     actions = build_hotkey_settings_actions()
+    geometry = build_hotkey_dialog_geometry()
 
-    panel_w = 278
-    panel_h = 172
+    panel_w = geometry.panel_w
+    panel_h = geometry.panel_h
     panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, panel_w, panel_h))
 
-    mode_card = _make_dialog_card(panel, 14, 98, panel_w - 28, 64, tr(sections[0].title_key))
+    mode_card = _make_dialog_card(
+        panel,
+        geometry.mode_card_x,
+        geometry.mode_card_y,
+        geometry.mode_card_w,
+        geometry.mode_card_h,
+        tr(sections[0].title_key),
+    )
 
     radio_keyboard = NSButton.alloc().initWithFrame_(NSMakeRect(36, 16, 78, 20))
     radio_keyboard.setButtonType_(NSRadioButton)
@@ -673,9 +685,16 @@ def ui_hotkey_settings_action(
     radio_mouse.setState_(NSControlStateValueOn if mode_value == "mouse" else 0)
     mode_card.addSubview_(radio_mouse)
 
-    current_card = _make_dialog_card(panel, 14, 12, panel_w - 28, 70, tr(sections[1].title_key))
+    current_card = _make_dialog_card(
+        panel,
+        geometry.current_card_x,
+        geometry.current_card_y,
+        geometry.current_card_w,
+        geometry.current_card_h,
+        tr(sections[1].title_key),
+    )
     keyboard_line = _make_dialog_text(
-        NSMakeRect(16, 30, panel_w - 56, 16),
+        NSMakeRect(16, geometry.current_keyboard_y, panel_w - 56, 16),
         "",
         NSFont.systemFontOfSize_(13),
         align=NSTextAlignmentLeft,
@@ -684,7 +703,7 @@ def ui_hotkey_settings_action(
     current_card.addSubview_(keyboard_line)
 
     mouse_line = _make_dialog_text(
-        NSMakeRect(16, 14, panel_w - 56, 16),
+        NSMakeRect(16, geometry.current_mouse_y, panel_w - 56, 16),
         "",
         NSFont.systemFontOfSize_(13),
         align=NSTextAlignmentLeft,
