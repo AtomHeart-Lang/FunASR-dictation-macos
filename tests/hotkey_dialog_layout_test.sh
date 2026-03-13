@@ -32,6 +32,9 @@ assert actions[-1].emphasis == "primary"
 
 geometry = build_hotkey_dialog_geometry()
 assert geometry.panel_w == 278
+assert geometry.mode_card_h == 60
+assert geometry.mode_radio_y == 6
+assert geometry.mode_title_bottom - (geometry.mode_radio_y + 20) >= 4
 assert geometry.current_card_h == 72
 assert geometry.current_keyboard_y == 22
 assert geometry.current_mouse_y == 6

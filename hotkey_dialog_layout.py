@@ -30,6 +30,8 @@ class HotkeyDialogGeometry:
     mode_card_y: int
     mode_card_w: int
     mode_card_h: int
+    mode_radio_y: int
+    mode_title_bottom: int
     current_card_x: int
     current_card_y: int
     current_card_w: int
@@ -89,6 +91,8 @@ def build_hotkey_dialog_geometry() -> HotkeyDialogGeometry:
         mode_card_y=100,
         mode_card_w=panel_w - 28,
         mode_card_h=60,
+        mode_radio_y=6,
+        mode_title_bottom=60 - 28,
         current_card_x=14,
         current_card_y=12,
         current_card_w=panel_w - 28,

@@ -673,13 +673,13 @@ def ui_hotkey_settings_action(
         tr(sections[0].title_key),
     )
 
-    radio_keyboard = NSButton.alloc().initWithFrame_(NSMakeRect(36, 16, 78, 20))
+    radio_keyboard = NSButton.alloc().initWithFrame_(NSMakeRect(36, geometry.mode_radio_y, 78, 20))
     radio_keyboard.setButtonType_(NSRadioButton)
     radio_keyboard.setTitle_(tr("mode_keyboard"))
     radio_keyboard.setState_(NSControlStateValueOn if mode_value == "keyboard" else 0)
     mode_card.addSubview_(radio_keyboard)
 
-    radio_mouse = NSButton.alloc().initWithFrame_(NSMakeRect(144, 16, 78, 20))
+    radio_mouse = NSButton.alloc().initWithFrame_(NSMakeRect(144, geometry.mode_radio_y, 78, 20))
     radio_mouse.setButtonType_(NSRadioButton)
     radio_mouse.setTitle_(tr("mode_mouse"))
     radio_mouse.setState_(NSControlStateValueOn if mode_value == "mouse" else 0)
