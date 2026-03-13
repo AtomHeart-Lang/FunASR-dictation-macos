@@ -113,6 +113,7 @@ MODEL_CACHE_DIRS = [
 ]
 _APP_ICON_CACHE: Optional[NSImage] = None
 _APP_ICON_ROUNDED_CACHE: Optional[NSImage] = None
+_BLANK_ALERT_ICON: Optional[NSImage] = None
 
 logging.basicConfig(
     filename=str(LOG_PATH),
@@ -358,7 +359,12 @@ def tr(key: str, **kwargs) -> str:
     if not item:
         text = key
     else:
-        text = item.get(APP_LANG) or item.get("en") or key
+        if APP_LANG in item:
+            text = item.get(APP_LANG, "")
+        elif "en" in item:
+            text = item.get("en", "")
+        else:
+            text = key
     return text.format(**kwargs) if kwargs else text
 
 
@@ -480,6 +486,13 @@ def _configure_alert_icon(alert, size: float = 52.0) -> None:
     except Exception:
         pass
     alert.setIcon_(icon)
+
+
+def _blank_alert_icon() -> NSImage:
+    global _BLANK_ALERT_ICON
+    if _BLANK_ALERT_ICON is None:
+        _BLANK_ALERT_ICON = NSImage.alloc().initWithSize_(NSMakeSize(1.0, 1.0))
+    return _BLANK_ALERT_ICON
 
 
 def _make_dialog_text(
@@ -1021,6 +1034,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         alert = NSAlert.alloc().init()
         alert.setMessageText_("")
         alert.setInformativeText_("")
+        alert.setIcon_(_blank_alert_icon())
         alert.addButtonWithTitle_(tr("save"))
         alert.addButtonWithTitle_(tr("cancel"))
 
@@ -1118,7 +1132,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         title_label = make_text(
             NSMakeRect(header_x, panel_h - 56, panel_w - header_x - 16, 28),
             tr("model_config_title"),
-            NSFont.boldSystemFontOfSize_(22),
+            NSFont.boldSystemFontOfSize_(18),
         )
         panel.addSubview_(title_label)
 
@@ -1146,7 +1160,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
                     cursor_y -= 38
                     if item.help_key:
                         help_label = make_wrapped_text(
-                            NSMakeRect(16, cursor_y, card_w - 32, 24),
+                            NSMakeRect(44, cursor_y, card_w - 60, 24),
                             tr(item.help_key),
                             NSFont.systemFontOfSize_(11),
                             color=secondary_text,
