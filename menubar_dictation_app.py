@@ -499,6 +499,28 @@ def _blank_alert_icon() -> NSImage:
     return _BLANK_ALERT_ICON
 
 
+def _center_alert_accessory_view(alert: NSAlert, panel: NSView) -> None:
+    try:
+        window = alert.window()
+        if window is None:
+            return
+        parent = panel.superview()
+        if parent is None:
+            return
+        parent_frame = parent.frame()
+        panel_frame = panel.frame()
+        parent_w = float(parent_frame.size.width)
+        panel_w = float(panel_frame.size.width)
+        if parent_w <= panel_w + 1.0:
+            return
+        target_x = round((parent_w - panel_w) / 2.0)
+        panel.setFrame_(
+            NSMakeRect(target_x, float(panel_frame.origin.y), panel_w, float(panel_frame.size.height))
+        )
+    except Exception as exc:
+        logging.debug("center accessory view skipped: %s", exc)
+
+
 def _make_dialog_text(
     frame,
     text: str,
@@ -1240,6 +1262,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         hotwords_field = control_map["hotwords"]
 
         alert.setAccessoryView_(panel)
+        _center_alert_accessory_view(alert, panel)
         resp = alert.runModal()
         if resp != NSAlertFirstButtonReturn:
             logging.info("ui_edit_model_config: canceled")

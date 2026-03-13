@@ -110,10 +110,7 @@ def build_model_config_dialog_layout() -> ModelConfigDialogLayout:
     panel_h = 790
 
     card_left_inset = 28
-    # NSAlert keeps extra trailing whitespace outside the accessory view.
-    # Extend the cards slightly past the panel's nominal trailing gutter so the
-    # visible right border matches the left border in the rendered modal.
-    card_right_inset = -4
+    card_right_inset = 28
     card_w = panel_w - card_left_inset - card_right_inset
 
     icon_size = 52

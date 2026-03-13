@@ -20,7 +20,7 @@ assert layout.panel_h == 790
 left_margin = layout.card_x
 right_margin = layout.panel_w - layout.card_x - layout.card_w
 assert left_margin == 28, left_margin
-assert right_margin == -4, right_margin
+assert right_margin == 28, right_margin
 
 icon_mid_y = layout.icon_y + (layout.icon_size / 2.0)
 title_mid_y = layout.title_y + (layout.title_h / 2.0)
@@ -30,6 +30,10 @@ assert layout.title_font_size == 16
 assert layout.field_label_font_size == 13
 assert layout.core_help_x == 44
 assert layout.toggle_help_x == 44
+
+source = (repo_dir / "menubar_dictation_app.py").read_text(encoding="utf-8")
+assert "_center_alert_accessory_view" in source
+assert "_center_alert_accessory_view(alert, panel)" in source
 
 print("[PASS] model config geometry")
 PY
