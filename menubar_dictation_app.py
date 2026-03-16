@@ -119,6 +119,7 @@ MODEL_CACHE_DIRS = [
 _APP_ICON_CACHE: Optional[NSImage] = None
 _APP_ICON_ROUNDED_CACHE: Optional[NSImage] = None
 _BLANK_ALERT_ICON: Optional[NSImage] = None
+_BUTTON_CALLBACK_TARGETS: List[object] = []
 
 
 class _ButtonCallbackTarget(NSObject):
@@ -538,9 +539,7 @@ def _bind_button_action(button: NSButton, owner, callback) -> None:
     target = _ButtonCallbackTarget.alloc().initWithCallback_(callback)
     button.setTarget_(target)
     button.setAction_("invoke:")
-    if not hasattr(owner, "_button_targets"):
-        owner._button_targets = []
-    owner._button_targets.append(target)
+    _BUTTON_CALLBACK_TARGETS.append(target)
 
 
 def _run_modal_window(window: NSWindow) -> int:
