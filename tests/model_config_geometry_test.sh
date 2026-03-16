@@ -32,8 +32,8 @@ assert layout.core_help_x == 44
 assert layout.toggle_help_x == 44
 
 source = (repo_dir / "menubar_dictation_app.py").read_text(encoding="utf-8")
-assert "_center_alert_accessory_view" in source
-assert "_center_alert_accessory_view(alert, panel)" in source
+assert "_run_modal_window(window)" in source
+assert "bottom_strip_h = 74" in source
 
 print("[PASS] model config geometry")
 PY

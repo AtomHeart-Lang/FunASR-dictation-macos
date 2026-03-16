@@ -4,6 +4,7 @@ import fcntl
 import gc
 import json
 import logging
+import objc
 import os
 import re
 import shutil
@@ -49,7 +50,7 @@ from AppKit import (
     NSWindowStyleMaskTitled,
     NSBackingStoreBuffered,
 )
-from Foundation import NSBundle, NSDate, NSLocale, NSRunLoop
+from Foundation import NSBundle, NSDate, NSLocale, NSObject, NSRunLoop
 from pynput import keyboard, mouse
 from hotkey_dialog_layout import (
     build_hotkey_dialog_geometry,
@@ -118,6 +119,18 @@ MODEL_CACHE_DIRS = [
 _APP_ICON_CACHE: Optional[NSImage] = None
 _APP_ICON_ROUNDED_CACHE: Optional[NSImage] = None
 _BLANK_ALERT_ICON: Optional[NSImage] = None
+
+
+class _ButtonCallbackTarget(NSObject):
+    def initWithCallback_(self, callback):
+        self = objc.super(_ButtonCallbackTarget, self).init()
+        if self is None:
+            return None
+        self._callback = callback
+        return self
+
+    def invoke_(self, sender) -> None:
+        self._callback(sender)
 
 logging.basicConfig(
     filename=str(LOG_PATH),
@@ -519,6 +532,30 @@ def _center_alert_accessory_view(alert: NSAlert, panel: NSView) -> None:
         )
     except Exception as exc:
         logging.debug("center accessory view skipped: %s", exc)
+
+
+def _bind_button_action(button: NSButton, owner, callback) -> None:
+    target = _ButtonCallbackTarget.alloc().initWithCallback_(callback)
+    button.setTarget_(target)
+    button.setAction_("invoke:")
+    if not hasattr(owner, "_button_targets"):
+        owner._button_targets = []
+    owner._button_targets.append(target)
+
+
+def _run_modal_window(window: NSWindow) -> int:
+    app = NSApplication.sharedApplication()
+    app.activateIgnoringOtherApps_(True)
+    window.center()
+    window.makeKeyAndOrderFront_(None)
+    try:
+        return int(app.runModalForWindow_(window))
+    finally:
+        try:
+            window.orderOut_(None)
+            window.close()
+        except Exception:
+            pass
 
 
 def _make_dialog_text(
@@ -1067,207 +1104,224 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
             seen.add(key)
             deduped.append(token)
         return ", ".join(deduped)
+    app = NSApplication.sharedApplication()
+    app.activateIgnoringOtherApps_(True)
 
-    while True:
-        app = NSApplication.sharedApplication()
-        app.activateIgnoringOtherApps_(True)
+    sections = build_model_config_sections()
+    layout = build_model_config_dialog_layout()
+    window_w = layout.panel_w
+    bottom_strip_h = 74
+    window_h = layout.panel_h + bottom_strip_h
+    card_x = layout.card_x
+    card_w = layout.card_w
+    section_heights = {
+        "core": 284,
+        "text": 214,
+        "hotwords": 150,
+    }
+    section_offset_y = bottom_strip_h
 
-        alert = NSAlert.alloc().init()
-        alert.setMessageText_("")
-        alert.setInformativeText_("")
-        alert.setIcon_(_blank_alert_icon())
-        alert.addButtonWithTitle_(tr("save"))
-        alert.addButtonWithTitle_(tr("cancel"))
+    primary_text = NSColor.labelColor()
+    secondary_text = NSColor.secondaryLabelColor()
+    section_text = NSColor.colorWithCalibratedRed_green_blue_alpha_(0.45, 0.71, 1.0, 1.0)
+    card_fill = NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.07)
+    card_border = NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.08)
 
-        sections = build_model_config_sections()
-        layout = build_model_config_dialog_layout()
-        panel_w = layout.panel_w
-        panel_h = layout.panel_h
-        card_x = layout.card_x
-        card_w = layout.card_w
-        section_heights = {
-            "core": 284,
-            "text": 214,
-            "hotwords": 150,
-        }
-        panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, panel_w, panel_h))
+    window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+        NSMakeRect(0, 0, window_w, window_h),
+        NSWindowStyleMaskTitled,
+        NSBackingStoreBuffered,
+        False,
+    )
+    window.setReleasedWhenClosed_(False)
+    window.setTitle_(tr("model_config_title"))
 
-        primary_text = NSColor.labelColor()
-        secondary_text = NSColor.secondaryLabelColor()
-        section_text = NSColor.colorWithCalibratedRed_green_blue_alpha_(0.45, 0.71, 1.0, 1.0)
-        card_fill = NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.07)
-        card_border = NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.08)
+    content = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, window_w, window_h))
+    content.setWantsLayer_(True)
+    content_layer = content.layer()
+    if content_layer is not None:
+        content_layer.setBackgroundColor_(NSColor.windowBackgroundColor().CGColor())
+    window.setContentView_(content)
 
-        def make_text(frame, text: str, font, color=None):
-            label = NSTextField.alloc().initWithFrame_(frame)
-            label.setEditable_(False)
-            label.setBezeled_(False)
-            label.setDrawsBackground_(False)
-            label.setSelectable_(False)
-            label.setFont_(font)
-            label.setTextColor_(color or primary_text)
-            label.setStringValue_(text)
-            return label
+    def make_text(frame, text: str, font, color=None):
+        label = NSTextField.alloc().initWithFrame_(frame)
+        label.setEditable_(False)
+        label.setBezeled_(False)
+        label.setDrawsBackground_(False)
+        label.setSelectable_(False)
+        label.setFont_(font)
+        label.setTextColor_(color or primary_text)
+        label.setStringValue_(text)
+        return label
 
-        def make_wrapped_text(frame, text: str, font, color=None):
-            label = make_text(frame, text, font, color=color)
-            label.setLineBreakMode_(0)
-            cell = label.cell()
-            if cell is not None:
-                cell.setWraps_(True)
-            return label
+    def make_wrapped_text(frame, text: str, font, color=None):
+        label = make_text(frame, text, font, color=color)
+        label.setLineBreakMode_(0)
+        cell = label.cell()
+        if cell is not None:
+            cell.setWraps_(True)
+        return label
 
-        def make_card(y: float, height: float, title: str):
-            card = NSView.alloc().initWithFrame_(NSMakeRect(card_x, y, card_w, height))
-            card.setWantsLayer_(True)
-            layer = card.layer()
-            if layer is not None:
-                layer.setCornerRadius_(16.0)
-                layer.setBackgroundColor_(card_fill.CGColor())
-                layer.setBorderWidth_(1.0)
-                layer.setBorderColor_(card_border.CGColor())
-            title_label = make_text(
-                NSMakeRect(16, height - 30, card_w - 32, 18),
-                title,
-                NSFont.boldSystemFontOfSize_(12),
-                color=section_text,
-            )
-            card.addSubview_(title_label)
-            panel.addSubview_(card)
-            return card
-
-        def make_input(card, x: float, y: float, width: float, value: str):
-            field = NSTextField.alloc().initWithFrame_(NSMakeRect(x, y, width, 28))
-            field.setFont_(NSFont.boldSystemFontOfSize_(14))
-            field.setStringValue_(value)
-            card.addSubview_(field)
-            return field
-
-        def make_check(card, x: float, y: float, width: float, text: str, value: bool):
-            box = NSButton.alloc().initWithFrame_(NSMakeRect(x, y, width, 24))
-            box.setButtonType_(NSSwitchButton)
-            box.setTitle_(text)
-            box.setFont_(NSFont.boldSystemFontOfSize_(13))
-            box.setState_(NSControlStateValueOn if value else 0)
-            card.addSubview_(box)
-            return box
-
-        def make_multiline_input(card, x: float, y: float, width: float, value: str, height: float):
-            scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
-            scroll.setBorderType_(NSBezelBorder)
-            scroll.setHasVerticalScroller_(True)
-            scroll.setHasHorizontalScroller_(False)
-            text_view = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, width, height))
-            text_view.setFont_(NSFont.systemFontOfSize_(13))
-            text_view.setString_((value or "").replace(", ", "\n"))
-            scroll.setDocumentView_(text_view)
-            card.addSubview_(scroll)
-            return text_view
-
-        icon = _app_icon_image(rounded=True)
-        if icon is not None:
-            icon_view = NSImageView.alloc().initWithFrame_(
-                NSMakeRect(layout.icon_x, layout.icon_y, layout.icon_size, layout.icon_size)
-            )
-            icon_view.setImage_(icon)
-            panel.addSubview_(icon_view)
-
+    def make_card(y: float, height: float, title: str):
+        card = NSView.alloc().initWithFrame_(NSMakeRect(card_x, y, card_w, height))
+        card.setWantsLayer_(True)
+        layer = card.layer()
+        if layer is not None:
+            layer.setCornerRadius_(16.0)
+            layer.setBackgroundColor_(card_fill.CGColor())
+            layer.setBorderWidth_(1.0)
+            layer.setBorderColor_(card_border.CGColor())
         title_label = make_text(
-            NSMakeRect(layout.title_x, layout.title_y, layout.title_w, layout.title_h),
-            tr("model_config_title"),
-            NSFont.boldSystemFontOfSize_(layout.title_font_size),
+            NSMakeRect(16, height - 30, card_w - 32, 18),
+            title,
+            NSFont.boldSystemFontOfSize_(12),
+            color=section_text,
         )
-        panel.addSubview_(title_label)
+        card.addSubview_(title_label)
+        content.addSubview_(card)
+        return card
 
-        control_map = {}
-        top_y = panel_h - 96
-        for section in sections:
-            section_h = section_heights[section.key]
-            top_y -= section_h
-            card = make_card(top_y, section_h, tr(section.title_key))
-            cursor_y = section_h - 70
+    def make_input(card, x: float, y: float, width: float, value: str):
+        field = NSTextField.alloc().initWithFrame_(NSMakeRect(x, y, width, 28))
+        field.setFont_(NSFont.boldSystemFontOfSize_(14))
+        field.setStringValue_(value)
+        card.addSubview_(field)
+        return field
 
-            if section.key == "core":
-                label_w = layout.core_label_w
-                field_x = layout.core_field_x
-                field_w = min(248, card_w - field_x - 16)
-                for item in section.items:
-                    title = make_text(
-                        NSMakeRect(16, cursor_y + 8, label_w, 18),
-                        tr(item.label_key),
-                        NSFont.boldSystemFontOfSize_(layout.field_label_font_size),
-                    )
-                    card.addSubview_(title)
-                    field = make_input(card, field_x, cursor_y, field_w, state[item.key])
-                    control_map[item.key] = field
-                    cursor_y -= 38
-                    if item.help_key:
-                        help_label = make_wrapped_text(
-                            NSMakeRect(layout.core_help_x, cursor_y, card_w - 60, 24),
-                            tr(item.help_key),
-                            NSFont.systemFontOfSize_(11),
-                            color=secondary_text,
-                        )
-                        card.addSubview_(help_label)
-                        cursor_y -= 30
+    def make_check(card, x: float, y: float, width: float, text: str, value: bool):
+        box = NSButton.alloc().initWithFrame_(NSMakeRect(x, y, width, 24))
+        box.setButtonType_(NSSwitchButton)
+        box.setTitle_(text)
+        box.setFont_(NSFont.boldSystemFontOfSize_(13))
+        box.setState_(NSControlStateValueOn if value else 0)
+        card.addSubview_(box)
+        return box
 
-            elif section.key == "text":
-                for item in section.items:
-                    box = make_check(card, 14, cursor_y, card_w - 28, tr(item.label_key), state[item.key])
-                    control_map[item.key] = box
-                    cursor_y -= 30
-                    if item.help_key:
-                        help_label = make_wrapped_text(
-                            NSMakeRect(layout.toggle_help_x, cursor_y, card_w - 60, 28),
-                            tr(item.help_key),
-                            NSFont.systemFontOfSize_(11),
-                            color=secondary_text,
-                        )
-                        card.addSubview_(help_label)
-                        cursor_y -= 34
-                    else:
-                        cursor_y -= 12
+    def make_multiline_input(card, x: float, y: float, width: float, value: str, height: float):
+        scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(x, y, width, height))
+        scroll.setBorderType_(NSBezelBorder)
+        scroll.setHasVerticalScroller_(True)
+        scroll.setHasHorizontalScroller_(False)
+        text_view = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, width, height))
+        text_view.setFont_(NSFont.systemFontOfSize_(13))
+        text_view.setString_((value or "").replace(", ", "\n"))
+        scroll.setDocumentView_(text_view)
+        card.addSubview_(scroll)
+        return text_view
 
-            elif section.key == "hotwords":
-                item = section.items[0]
+    icon = _app_icon_image(rounded=True)
+    if icon is not None:
+        icon_view = NSImageView.alloc().initWithFrame_(
+            NSMakeRect(layout.icon_x, layout.icon_y + section_offset_y, layout.icon_size, layout.icon_size)
+        )
+        icon_view.setImage_(icon)
+        content.addSubview_(icon_view)
+
+    title_label = make_text(
+        NSMakeRect(layout.title_x, layout.title_y + section_offset_y, layout.title_w, layout.title_h),
+        tr("model_config_title"),
+        NSFont.boldSystemFontOfSize_(layout.title_font_size),
+    )
+    content.addSubview_(title_label)
+
+    control_map = {}
+    top_y = layout.panel_h - 96 + section_offset_y
+    for section in sections:
+        section_h = section_heights[section.key]
+        top_y -= section_h
+        card = make_card(top_y, section_h, tr(section.title_key))
+        cursor_y = section_h - 70
+
+        if section.key == "core":
+            label_w = layout.core_label_w
+            field_x = layout.core_field_x
+            field_w = min(248, card_w - field_x - 16)
+            for item in section.items:
                 title = make_text(
-                    NSMakeRect(16, cursor_y + 6, card_w - 32, 18),
+                    NSMakeRect(16, cursor_y + 8, label_w, 18),
                     tr(item.label_key),
                     NSFont.boldSystemFontOfSize_(layout.field_label_font_size),
                 )
                 card.addSubview_(title)
-                cursor_y -= 22
-                help_label = make_wrapped_text(
-                    NSMakeRect(16, cursor_y, card_w - 32, 24),
-                    tr(item.help_key),
-                    NSFont.systemFontOfSize_(11),
-                    color=secondary_text,
-                )
-                card.addSubview_(help_label)
-                cursor_y -= 82
-                hotwords_field = make_multiline_input(card, 16, 14, card_w - 32, state["hotwords"], 72)
-                control_map["hotwords"] = hotwords_field
+                field = make_input(card, field_x, cursor_y, field_w, state[item.key])
+                control_map[item.key] = field
+                cursor_y -= 38
+                if item.help_key:
+                    help_label = make_wrapped_text(
+                        NSMakeRect(layout.core_help_x, cursor_y, card_w - 60, 24),
+                        tr(item.help_key),
+                        NSFont.systemFontOfSize_(11),
+                        color=secondary_text,
+                    )
+                    card.addSubview_(help_label)
+                    cursor_y -= 30
 
-            top_y -= 14
+        elif section.key == "text":
+            for item in section.items:
+                box = make_check(card, 14, cursor_y, card_w - 28, tr(item.label_key), state[item.key])
+                control_map[item.key] = box
+                cursor_y -= 30
+                if item.help_key:
+                    help_label = make_wrapped_text(
+                        NSMakeRect(layout.toggle_help_x, cursor_y, card_w - 60, 28),
+                        tr(item.help_key),
+                        NSFont.systemFontOfSize_(11),
+                        color=secondary_text,
+                    )
+                    card.addSubview_(help_label)
+                    cursor_y -= 34
+                else:
+                    cursor_y -= 12
 
-        language_field = control_map["language"]
-        sample_rate_field = control_map["sample_rate"]
-        channels_field = control_map["channels"]
-        paste_delay_field = control_map["paste_delay_ms"]
-        idle_unload_field = control_map["idle_unload_seconds"]
-        enable_beep_box = control_map["enable_beep"]
-        use_itn_box = control_map["use_itn"]
-        merge_vad_box = control_map["merge_vad"]
-        remove_emoji_box = control_map["remove_emoji"]
-        hotwords_field = control_map["hotwords"]
+        elif section.key == "hotwords":
+            item = section.items[0]
+            title = make_text(
+                NSMakeRect(16, cursor_y + 6, card_w - 32, 18),
+                tr(item.label_key),
+                NSFont.boldSystemFontOfSize_(layout.field_label_font_size),
+            )
+            card.addSubview_(title)
+            cursor_y -= 22
+            help_label = make_wrapped_text(
+                NSMakeRect(16, cursor_y, card_w - 32, 24),
+                tr(item.help_key),
+                NSFont.systemFontOfSize_(11),
+                color=secondary_text,
+            )
+            card.addSubview_(help_label)
+            cursor_y -= 82
+            hotwords_field = make_multiline_input(card, 16, 14, card_w - 32, state["hotwords"], 72)
+            control_map["hotwords"] = hotwords_field
 
-        alert.setAccessoryView_(panel)
-        _center_alert_accessory_view(alert, panel)
-        resp = alert.runModal()
-        if resp != NSAlertFirstButtonReturn:
-            logging.info("ui_edit_model_config: canceled")
-            return None
+        top_y -= 14
 
+    cancel_button = NSButton.alloc().initWithFrame_(NSMakeRect(window_w - 182, 16, 76, 30))
+    cancel_button.setTitle_(tr("cancel"))
+    cancel_button.setKeyEquivalent_("\x1b")
+    content.addSubview_(cancel_button)
+
+    save_button = NSButton.alloc().initWithFrame_(NSMakeRect(window_w - 96, 16, 76, 30))
+    save_button.setTitle_(tr("save"))
+    save_button.setKeyEquivalent_("\r")
+    content.addSubview_(save_button)
+
+    language_field = control_map["language"]
+    sample_rate_field = control_map["sample_rate"]
+    channels_field = control_map["channels"]
+    paste_delay_field = control_map["paste_delay_ms"]
+    idle_unload_field = control_map["idle_unload_seconds"]
+    enable_beep_box = control_map["enable_beep"]
+    use_itn_box = control_map["use_itn"]
+    merge_vad_box = control_map["merge_vad"]
+    remove_emoji_box = control_map["remove_emoji"]
+    hotwords_field = control_map["hotwords"]
+
+    result_holder = {"config": None}
+
+    def finish_cancel(_sender=None):
+        app.stopModalWithCode_(0)
+
+    def finish_save(_sender=None):
         state["language"] = language_field.stringValue().strip().lower()
         state["sample_rate"] = sample_rate_field.stringValue().strip()
         state["channels"] = channels_field.stringValue().strip()
@@ -1282,7 +1336,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         try:
             if not state["language"]:
                 raise ValueError("language cannot be empty")
-            return CoreConfig(
+            result_holder["config"] = CoreConfig(
                 language=state["language"],
                 sample_rate=parse_int(state["sample_rate"], "sample_rate", 8000, 48000),
                 channels=parse_int(state["channels"], "channels", 1, 2),
@@ -1300,6 +1354,17 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
         except Exception as exc:
             logging.warning("ui_edit_model_config invalid: %s", exc)
             ui_alert_native(str(exc), title=tr("invalid_model_config_title"))
+            return
+        app.stopModalWithCode_(1)
+
+    _bind_button_action(cancel_button, window, finish_cancel)
+    _bind_button_action(save_button, window, finish_save)
+
+    resp = _run_modal_window(window)
+    if resp != 1:
+        logging.info("ui_edit_model_config: canceled")
+        return None
+    return result_holder["config"]
 
 
 def load_ui_settings() -> UISettings:
