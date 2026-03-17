@@ -8,9 +8,9 @@ from pathlib import Path
 repo = Path('/Volumes/SATA-DATA/SynologyDrive/codex/SenseVoiceDictation/sensevoice-dictation-macos')
 create_uninstaller = (repo / 'create_uninstaller.sh').read_text(encoding='utf-8')
 assert 'assets/uninstaller_launcher_icon.png' in create_uninstaller, 'Uninstaller should use a dedicated icon asset'
-assert 'APP_VERSION="2.2.0"' in create_uninstaller
-assert 'APP_VERSION="2.2.0"' in (repo / 'build_dmg.sh').read_text(encoding='utf-8')
-assert 'APP_VERSION="2.2.0"' in (repo / 'create_launcher.sh').read_text(encoding='utf-8')
+assert 'APP_VERSION="2.2.1"' in create_uninstaller
+assert 'APP_VERSION="2.2.1"' in (repo / 'build_dmg.sh').read_text(encoding='utf-8')
+assert 'APP_VERSION="2.2.1"' in (repo / 'create_launcher.sh').read_text(encoding='utf-8')
 assert (repo / 'assets' / 'uninstaller_launcher_icon.png').exists(), 'Dedicated uninstaller icon asset is missing'
 
 readme = (repo / 'README.md').read_text(encoding='utf-8')

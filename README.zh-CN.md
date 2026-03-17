@@ -43,7 +43,7 @@ DMG 安装器会自动完成：
 - 创建 `~/Applications/Uninstall FunASR Dictation.app` 图形化卸载器
 
 安装步骤：
-1. 从 Releases 下载最新的 `funasr-dictation-installer-2.2.0.dmg`
+1. 从 Releases 下载最新的 `funasr-dictation-installer-2.2.1.dmg`
 2. 打开 DMG
 3. 双击 `Install FunASR Dictation.app`
 4. 等待原生安装窗口完成下载与部署
@@ -202,7 +202,7 @@ DMG 安装器会自动完成：
 产物：
 
 ```bash
-./funasr-dictation-installer-2.2.0.dmg
+./funasr-dictation-installer-2.2.1.dmg
 ```
 
 ### 脚本说明
