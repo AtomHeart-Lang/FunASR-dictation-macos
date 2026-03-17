@@ -110,7 +110,7 @@ def build_model_config_dialog_layout() -> ModelConfigDialogLayout:
     panel_h = 790
 
     card_left_inset = 28
-    card_right_inset = 16
+    card_right_inset = 28
     card_w = panel_w - card_left_inset - card_right_inset
 
     icon_size = 52
