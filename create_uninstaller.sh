@@ -2,11 +2,11 @@
 set -euo pipefail
 
 APP_NAME="Uninstall FunASR Dictation"
-APP_VERSION="2.2.1"
+APP_VERSION="2.2.2"
 APP_BUNDLE="$HOME/Applications/$APP_NAME.app"
 APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
 RUNTIME_PATH_FILE="$APP_SUPPORT_DIR/runtime_app_dir.txt"
-ICON_SRC="$(cd "$(dirname "$0")" && pwd)/assets/uninstaller_launcher_icon.png"
+ICON_SRC="$(cd "$(dirname "$0")" && pwd)/assets/uninstaller_launcher_icon_finnal.png"
 RUNNER_SRC="$(cd "$(dirname "$0")" && pwd)/task_runner/TaskProgressApp.m"
 RUNNER_TEMPLATE_BIN="$(cd "$(dirname "$0")" && pwd)/task_runner/TaskProgressApp"
 TMP_DIR="$(mktemp -d /tmp/funasr-uninstaller.XXXXXX)"

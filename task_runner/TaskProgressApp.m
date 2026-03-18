@@ -53,6 +53,7 @@ static NSString *SanitizeOutput(NSString *value) {
 @property(nonatomic, strong) NSMutableString *partialLine;
 @property(nonatomic, strong) NSMutableArray<NSDictionary *> *pendingWarnings;
 @property(nonatomic, assign) BOOL sawProgress;
+@property(nonatomic, assign) BOOL taskStarted;
 @property(nonatomic, assign) BOOL finished;
 @end
 
@@ -89,7 +90,7 @@ static NSString *SanitizeOutput(NSString *value) {
 
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender {
     (void)sender;
-    if (self.finished) {
+    if (self.finished || !self.taskStarted || self.task == nil || !self.task.running) {
         return NSTerminateNow;
     }
     NSBeep();
@@ -99,7 +100,7 @@ static NSString *SanitizeOutput(NSString *value) {
 
 - (BOOL)windowShouldClose:(id)sender {
     (void)sender;
-    if (self.finished) {
+    if (self.finished || !self.taskStarted || self.task == nil || !self.task.running) {
         return YES;
     }
     NSBeep();
@@ -317,6 +318,7 @@ static NSString *SanitizeOutput(NSString *value) {
         [self finishWithStatus:1];
         return;
     }
+    self.taskStarted = YES;
 }
 
 - (void)consumeOutputData:(NSData *)data {

@@ -43,7 +43,7 @@ What the DMG installer does:
 - creates the graphical uninstaller at `~/Applications/Uninstall FunASR Dictation.app`
 
 Installation steps:
-1. Download the latest `funasr-dictation-installer-2.2.1.dmg` from Releases.
+1. Download the latest `funasr-dictation-installer-2.2.2.dmg` from Releases.
 2. Open the DMG.
 3. Double-click `Install FunASR Dictation.app`.
 4. Wait for the native installer window to finish downloading and setting up the runtime.
@@ -202,7 +202,7 @@ Optional source-install commands:
 Output:
 
 ```bash
-./funasr-dictation-installer-2.2.1.dmg
+./funasr-dictation-installer-2.2.2.dmg
 ```
 
 ### Script Reference
