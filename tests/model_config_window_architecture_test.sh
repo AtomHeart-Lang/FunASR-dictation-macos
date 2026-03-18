@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-python3 - <<'PY'
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)" python3 - <<'PY'
+import os
 from pathlib import Path
 
-repo = Path('/Volumes/SATA-DATA/SynologyDrive/codex/SenseVoiceDictation/sensevoice-dictation-macos')
+repo = Path(os.environ['REPO_DIR'])
 source = (repo / 'menubar_dictation_app.py').read_text(encoding='utf-8')
 start = source.index('def ui_edit_model_config(')
 end = source.index('\ndef load_ui_settings(', start)

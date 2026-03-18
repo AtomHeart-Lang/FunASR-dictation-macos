@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO='/Volumes/SATA-DATA/SynologyDrive/codex/SenseVoiceDictation/sensevoice-dictation-macos'
-
-python3 - <<'PY'
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)" python3 - <<'PY'
+import os
 from pathlib import Path
-repo = Path('/Volumes/SATA-DATA/SynologyDrive/codex/SenseVoiceDictation/sensevoice-dictation-macos')
+repo = Path(os.environ['REPO_DIR'])
 create_uninstaller = (repo / 'create_uninstaller.sh').read_text(encoding='utf-8')
-assert 'APP_VERSION="2.2.2"' in create_uninstaller
-assert 'APP_VERSION="2.2.2"' in (repo / 'build_dmg.sh').read_text(encoding='utf-8')
-assert 'APP_VERSION="2.2.2"' in (repo / 'create_launcher.sh').read_text(encoding='utf-8')
+assert 'APP_VERSION="1.0.0"' in create_uninstaller
+assert 'APP_VERSION="1.0.0"' in (repo / 'build_dmg.sh').read_text(encoding='utf-8')
+assert 'APP_VERSION="1.0.0"' in (repo / 'create_launcher.sh').read_text(encoding='utf-8')
 assert 'assets/uninstaller_launcher_icon_finnal.png' in create_uninstaller
 assert (repo / 'assets' / 'uninstaller_launcher_icon_finnal.png').exists(), 'Dedicated uninstaller icon asset is missing'
 

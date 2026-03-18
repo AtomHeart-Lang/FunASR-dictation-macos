@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-
-python3 - <<'PY'
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)" python3 - <<'PY'
+import os
 import sys
 from pathlib import Path
 
-repo_dir = Path("/Volumes/SATA-DATA/SynologyDrive/codex/SenseVoiceDictation/sensevoice-dictation-macos")
+repo_dir = Path(os.environ["REPO_DIR"])
 sys.path.insert(0, str(repo_dir))
 
 from model_config_layout import build_model_config_sections

@@ -11,7 +11,7 @@ rm -f menubar_debug.log menubar_runtime.log menubar.out.log menubar.err.log
 rm -f menubar_app.lock
 # Keep local runtime configs; release zip already excludes them.
 
-ZIP_NAME="sensevoice-dictation-macos-release.zip"
+ZIP_NAME="funasr-dictation-macos-release.zip"
 rm -f "$ZIP_NAME"
 zip -r "$ZIP_NAME" . \
   -x ".venv/*" \

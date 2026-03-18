@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-python3 - <<'PY'
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)" python3 - <<'PY'
+import os
 from pathlib import Path
 
-repo_dir = Path('/Volumes/SATA-DATA/SynologyDrive/codex/SenseVoiceDictation/sensevoice-dictation-macos')
+repo_dir = Path(os.environ['REPO_DIR'])
 source = (repo_dir / 'menubar_dictation_app.py').read_text(encoding='utf-8')
 
 assert 'def _bind_button_action(' in source
