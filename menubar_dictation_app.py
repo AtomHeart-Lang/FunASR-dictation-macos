@@ -57,7 +57,11 @@ from hotkey_dialog_layout import (
     build_hotkey_settings_actions,
     build_hotkey_settings_sections,
 )
-from model_config_layout import build_model_config_dialog_layout, build_model_config_sections
+from model_config_layout import (
+    build_model_config_dialog_layout,
+    build_model_config_section_heights,
+    build_model_config_sections,
+)
 
 try:
     import tomllib
@@ -78,7 +82,7 @@ FUNASR_RUNTIME_DIR = APP_DIR / "funasr_nano_runtime"
 FUNASR_REMOTE_CODE_PATH = FUNASR_RUNTIME_DIR / "model.py"
 MENU_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
 APP_ICON = str((APP_DIR / "assets" / "app_launcher_icon.png").resolve())
-APP_BUILD = "2026-03-18-v1.0.0"
+APP_BUILD = "2026-03-21-v1.0.1"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 DEFAULT_NCPU = max(1, int(os.environ.get("SVD_NCPU", "2")))
@@ -116,6 +120,10 @@ MODEL_CACHE_DIRS = [
     Path.home() / ".cache/modelscope/hub/models/iic/SenseVoiceSmall",
     Path.home() / ".cache/modelscope/hub/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
 ]
+PRIMARY_MODEL_CACHE_DIR = Path.home() / ".cache/modelscope/hub/models/FunAudioLLM/Fun-ASR-Nano-2512"
+PRIMARY_VAD_CACHE_DIR = (
+    Path.home() / ".cache/modelscope/hub/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch"
+)
 _APP_ICON_CACHE: Optional[NSImage] = None
 _APP_ICON_ROUNDED_CACHE: Optional[NSImage] = None
 _BLANK_ALERT_ICON: Optional[NSImage] = None
@@ -158,6 +166,12 @@ def ensure_funasr_modules_loaded() -> None:
         _AUTOMODEL_CLS = auto_model_cls
         _POSTPROCESS_FN = postprocess_fn
         logging.info("funasr lazy import done in %.3fs", time.monotonic() - import_start)
+
+
+def _prefer_cached_model_source(model_name: str, cache_dir: Path) -> str:
+    if cache_dir.exists() and (cache_dir / "model.pt").exists():
+        return str(cache_dir)
+    return model_name
 
 
 def maybe_postprocess_text(raw_text: str) -> str:
@@ -1107,17 +1121,13 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
     app.activateIgnoringOtherApps_(True)
 
     sections = build_model_config_sections()
-    layout = build_model_config_dialog_layout()
+    section_heights = build_model_config_section_heights(sections)
+    layout = build_model_config_dialog_layout(sections)
     window_w = layout.panel_w
     bottom_strip_h = 74
     window_h = layout.panel_h + bottom_strip_h
     card_x = layout.card_x
     card_w = layout.card_w
-    section_heights = {
-        "core": 284,
-        "text": 214,
-        "hotwords": 150,
-    }
     section_offset_y = bottom_strip_h
 
     primary_text = NSColor.labelColor()
@@ -2341,13 +2351,15 @@ class DictationEngine:
             ensure_funasr_runtime_imports()
             ensure_funasr_modules_loaded()
             assert _AUTOMODEL_CLS is not None
+            model_source = _prefer_cached_model_source(MODEL_NAME, PRIMARY_MODEL_CACHE_DIR)
+            vad_source = _prefer_cached_model_source(VAD_MODEL_NAME, PRIMARY_VAD_CACHE_DIR)
             load_errors = []
             try:
                 model = _AUTOMODEL_CLS(
-                    model=MODEL_NAME,
+                    model=model_source,
                     trust_remote_code=True,
                     remote_code=str(FUNASR_REMOTE_CODE_PATH),
-                    vad_model=VAD_MODEL_NAME,
+                    vad_model=vad_source,
                     vad_kwargs={"max_single_segment_time": 30000},
                     device="cpu",
                     disable_update=True,
@@ -2357,9 +2369,9 @@ class DictationEngine:
             except Exception as exc:
                 load_errors.append(f"trust_remote_code=True: {exc!r}")
                 model = _AUTOMODEL_CLS(
-                    model=MODEL_NAME,
+                    model=model_source,
                     trust_remote_code=False,
-                    vad_model=VAD_MODEL_NAME,
+                    vad_model=vad_source,
                     vad_kwargs={"max_single_segment_time": 30000},
                     device="cpu",
                     disable_update=True,
@@ -2375,6 +2387,7 @@ class DictationEngine:
                 DEFAULT_NCPU,
                 time.monotonic() - load_started,
             )
+            logging.info("model sources resolved: model=%s vad=%s", model_source, vad_source)
             if load_errors:
                 logging.warning("model load fallback used: %s", " | ".join(load_errors))
         except Exception as exc:

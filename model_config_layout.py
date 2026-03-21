@@ -38,6 +38,31 @@ class ModelConfigDialogLayout:
     toggle_help_x: int
 
 
+def build_model_config_section_heights(
+    sections: Tuple[ModelConfigSection, ...],
+) -> dict[str, int]:
+    heights: dict[str, int] = {}
+    for section in sections:
+        if section.key == "core":
+            height = 70
+            for item in section.items:
+                height += 38
+                if item.help_key:
+                    height += 30
+            heights[section.key] = height
+        elif section.key == "text":
+            height = 70
+            for item in section.items:
+                height += 30
+                height += 34 if item.help_key else 12
+            heights[section.key] = height
+        elif section.key == "hotwords":
+            heights[section.key] = 150
+        else:
+            raise ValueError(f"Unknown model config section: {section.key}")
+    return heights
+
+
 def build_model_config_sections() -> Tuple[ModelConfigSection, ...]:
     return (
         ModelConfigSection(
@@ -105,9 +130,14 @@ def build_model_config_sections() -> Tuple[ModelConfigSection, ...]:
     )
 
 
-def build_model_config_dialog_layout() -> ModelConfigDialogLayout:
+def build_model_config_dialog_layout(
+    sections: Optional[Tuple[ModelConfigSection, ...]] = None,
+) -> ModelConfigDialogLayout:
+    sections = sections or build_model_config_sections()
+    section_heights = build_model_config_section_heights(sections)
     panel_w = 476
-    panel_h = 790
+    section_gap = 14
+    panel_h = 96 + sum(section_heights.values()) + (section_gap * len(sections)) + 4
 
     card_left_inset = 28
     card_right_inset = 28

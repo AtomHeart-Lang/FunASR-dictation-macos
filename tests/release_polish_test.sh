@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 repo = Path(os.environ['REPO_DIR'])
 create_uninstaller = (repo / 'create_uninstaller.sh').read_text(encoding='utf-8')
-assert 'APP_VERSION="1.0.0"' in create_uninstaller
-assert 'APP_VERSION="1.0.0"' in (repo / 'build_dmg.sh').read_text(encoding='utf-8')
-assert 'APP_VERSION="1.0.0"' in (repo / 'create_launcher.sh').read_text(encoding='utf-8')
+assert 'APP_VERSION="1.0.1"' in create_uninstaller
+assert 'APP_VERSION="1.0.1"' in (repo / 'build_dmg.sh').read_text(encoding='utf-8')
+assert 'APP_VERSION="1.0.1"' in (repo / 'create_launcher.sh').read_text(encoding='utf-8')
 assert 'assets/uninstaller_launcher_icon_finnal.png' in create_uninstaller
 assert (repo / 'assets' / 'uninstaller_launcher_icon_finnal.png').exists(), 'Dedicated uninstaller icon asset is missing'
 

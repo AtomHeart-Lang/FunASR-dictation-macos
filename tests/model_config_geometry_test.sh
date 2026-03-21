@@ -9,12 +9,21 @@ from pathlib import Path
 repo_dir = Path(os.environ["REPO_DIR"])
 sys.path.insert(0, str(repo_dir))
 
-from model_config_layout import build_model_config_dialog_layout
+from model_config_layout import (
+    build_model_config_dialog_layout,
+    build_model_config_section_heights,
+    build_model_config_sections,
+)
 
-layout = build_model_config_dialog_layout()
+sections = build_model_config_sections()
+section_heights = build_model_config_section_heights(sections)
+layout = build_model_config_dialog_layout(sections)
 
 assert layout.panel_w == 476
-assert layout.panel_h == 790
+assert section_heights["core"] == 380, section_heights
+assert section_heights["text"] == 282, section_heights
+assert section_heights["hotwords"] == 150, section_heights
+assert layout.panel_h == 954, layout.panel_h
 
 left_margin = layout.card_x
 right_margin = layout.panel_w - layout.card_x - layout.card_w
