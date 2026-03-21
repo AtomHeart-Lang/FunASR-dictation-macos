@@ -82,7 +82,7 @@ FUNASR_RUNTIME_DIR = APP_DIR / "funasr_nano_runtime"
 FUNASR_REMOTE_CODE_PATH = FUNASR_RUNTIME_DIR / "model.py"
 MENU_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
 APP_ICON = str((APP_DIR / "assets" / "app_launcher_icon.png").resolve())
-APP_BUILD = "2026-03-21-v1.0.1"
+APP_BUILD = "2026-03-21-v1.0.2"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 DEFAULT_NCPU = max(1, int(os.environ.get("SVD_NCPU", "2")))
@@ -1125,10 +1125,10 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
     layout = build_model_config_dialog_layout(sections)
     window_w = layout.panel_w
     bottom_strip_h = 74
-    window_h = layout.panel_h + bottom_strip_h
+    visible_panel_h = min(layout.panel_h, 620)
+    window_h = visible_panel_h + bottom_strip_h
     card_x = layout.card_x
     card_w = layout.card_w
-    section_offset_y = bottom_strip_h
 
     primary_text = NSColor.labelColor()
     secondary_text = NSColor.secondaryLabelColor()
@@ -1151,6 +1151,20 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
     if content_layer is not None:
         content_layer.setBackgroundColor_(NSColor.windowBackgroundColor().CGColor())
     window.setContentView_(content)
+
+    scroll_view = NSScrollView.alloc().initWithFrame_(NSMakeRect(0, bottom_strip_h, window_w, visible_panel_h))
+    scroll_view.setHasVerticalScroller_(True)
+    scroll_view.setHasHorizontalScroller_(False)
+    scroll_view.setAutohidesScrollers_(True)
+    scroll_view.setDrawsBackground_(False)
+    content.addSubview_(scroll_view)
+
+    panel = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, window_w, layout.panel_h))
+    panel.setWantsLayer_(True)
+    panel_layer = panel.layer()
+    if panel_layer is not None:
+        panel_layer.setBackgroundColor_(NSColor.windowBackgroundColor().CGColor())
+    scroll_view.setDocumentView_(panel)
 
     def make_text(frame, text: str, font, color=None):
         label = NSTextField.alloc().initWithFrame_(frame)
@@ -1187,7 +1201,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
             color=section_text,
         )
         card.addSubview_(title_label)
-        content.addSubview_(card)
+        panel.addSubview_(card)
         return card
 
     def make_input(card, x: float, y: float, width: float, value: str):
@@ -1221,20 +1235,20 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
     icon = _app_icon_image(rounded=True)
     if icon is not None:
         icon_view = NSImageView.alloc().initWithFrame_(
-            NSMakeRect(layout.icon_x, layout.icon_y + section_offset_y, layout.icon_size, layout.icon_size)
+            NSMakeRect(layout.icon_x, layout.icon_y, layout.icon_size, layout.icon_size)
         )
         icon_view.setImage_(icon)
-        content.addSubview_(icon_view)
+        panel.addSubview_(icon_view)
 
     title_label = make_text(
-        NSMakeRect(layout.title_x, layout.title_y + section_offset_y, layout.title_w, layout.title_h),
+        NSMakeRect(layout.title_x, layout.title_y, layout.title_w, layout.title_h),
         tr("model_config_title"),
         NSFont.boldSystemFontOfSize_(layout.title_font_size),
     )
-    content.addSubview_(title_label)
+    panel.addSubview_(title_label)
 
     control_map = {}
-    top_y = layout.panel_h - 96 + section_offset_y
+    top_y = layout.panel_h - 96
     for section in sections:
         section_h = section_heights[section.key]
         top_y -= section_h
