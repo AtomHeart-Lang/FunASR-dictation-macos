@@ -10,6 +10,7 @@ VERSION="3.11.15+20260303"
 PYTHON_ARCHIVE=""
 PYTHON_SHA256=""
 PYTHON_URL=""
+BUNDLED_PYTHON_DIR=""
 
 is_chinese_locale() {
   local locale="${LC_ALL:-${LC_MESSAGES:-${LANG:-${AppleLocale:-}}}}"
@@ -62,6 +63,7 @@ pick_asset() {
   if [[ -n "${SVD_PYTHON_URL:-}" ]]; then
     PYTHON_URL="$SVD_PYTHON_URL"
   fi
+  BUNDLED_PYTHON_DIR="${SVD_BUNDLED_PYTHON_DIR:-$(cd "$(dirname "$0")" && pwd)/bundled_python}"
 }
 
 curl_attempt() {
@@ -115,6 +117,17 @@ download_python_archive() {
   return "$exit_code"
 }
 
+use_bundled_archive_if_available() {
+  local bundled_archive="$BUNDLED_PYTHON_DIR/$PYTHON_ARCHIVE"
+  if [[ ! -f "$bundled_archive" ]]; then
+    return 1
+  fi
+  emit_progress 24 "$(localize "使用安装包内置的独立 Python 运行时" "Using bundled standalone Python runtime")"
+  echo "[Step] $(localize "使用安装包内置的独立 Python 运行时" "Using bundled standalone Python runtime")" >&2
+  cp "$bundled_archive" "$ARCHIVE_PATH"
+  return 0
+}
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "[ERROR] $(localize "此脚本仅支持 macOS。" "This script only supports macOS.")"
   exit 1
@@ -146,8 +159,10 @@ trap cleanup EXIT
 mkdir -p "$INSTALL_ROOT"
 
 emit_progress 24 "$(localize "下载独立 Python 运行时" "Downloading standalone Python runtime")"
-echo "[Step] $(localize "下载独立 Python 运行时" "Downloading standalone Python runtime")" >&2
-download_python_archive
+if ! use_bundled_archive_if_available; then
+  echo "[Step] $(localize "下载独立 Python 运行时" "Downloading standalone Python runtime")" >&2
+  download_python_archive
+fi
 
 actual_sha="$(shasum -a 256 "$ARCHIVE_PATH" | awk '{print $1}')"
 if [[ "$actual_sha" != "$PYTHON_SHA256" ]]; then

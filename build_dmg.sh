@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="FunASR Dictation"
-APP_VERSION="1.0.2"
+APP_VERSION="1.0.3"
 INSTALLER_APP_NAME="Install FunASR Dictation.app"
 DMG_NAME="funasr-dictation-installer-${APP_VERSION}.dmg"
 WORK_DIR="$(mktemp -d /tmp/funasr-dmg.XXXXXX)"
@@ -15,6 +15,9 @@ INSTALLER_APP="$STAGE_DIR/$INSTALLER_APP_NAME"
 ICON_SRC="$APP_DIR/assets/app_launcher_icon.png"
 TASK_RUNNER_SRC="$APP_DIR/task_runner/TaskProgressApp.m"
 TASK_RUNNER_BIN="$WORK_DIR/TaskProgressApp"
+PYTHON_RELEASE_TAG="20260303"
+PYTHON_VERSION="3.11.15+20260303"
+BUNDLED_PYTHON_DIR="$PAYLOAD_APP_DIR/bundled_python"
 
 cleanup() {
   rm -rf "$WORK_DIR"
@@ -22,6 +25,15 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$STAGE_DIR" "$PAYLOAD_APP_DIR" "$INSTALLER_APP/Contents/MacOS" "$INSTALLER_APP/Contents/Resources"
+
+download_python_asset() {
+  local archive="$1"
+  local url="https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_RELEASE_TAG}/${archive//+/%%2B}"
+  url="${url//%%2B/%2B}"
+  local target="$BUNDLED_PYTHON_DIR/$archive"
+  mkdir -p "$BUNDLED_PYTHON_DIR"
+  curl --fail --location --retry 3 --retry-all-errors --connect-timeout 20 "$url" -o "$target"
+}
 
 echo "[Step] Staging payload"
 rsync -a \
@@ -37,6 +49,10 @@ rsync -a \
   --exclude "ui_settings.json" \
   --exclude ".DS_Store" \
   "$APP_DIR/" "$PAYLOAD_APP_DIR/"
+
+echo "[Step] Bundling standalone Python runtime archives"
+download_python_asset "cpython-${PYTHON_VERSION}-aarch64-apple-darwin-install_only_stripped.tar.gz"
+download_python_asset "cpython-${PYTHON_VERSION}-x86_64-apple-darwin-install_only_stripped.tar.gz"
 
 chmod +x \
   "$PAYLOAD_APP_DIR/install.sh" \

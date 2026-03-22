@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#import <signal.h>
 
 static NSString *Localized(NSString *zh, NSString *en) {
     NSArray<NSString *> *langs = [NSLocale preferredLanguages];
@@ -54,6 +55,7 @@ static NSString *SanitizeOutput(NSString *value) {
 @property(nonatomic, strong) NSMutableArray<NSDictionary *> *pendingWarnings;
 @property(nonatomic, assign) BOOL sawProgress;
 @property(nonatomic, assign) BOOL taskStarted;
+@property(nonatomic, assign) BOOL cancellationRequested;
 @property(nonatomic, assign) BOOL finished;
 @end
 
@@ -93,8 +95,7 @@ static NSString *SanitizeOutput(NSString *value) {
     if (self.finished || !self.taskStarted || self.task == nil || !self.task.running) {
         return NSTerminateNow;
     }
-    NSBeep();
-    self.statusLabel.stringValue = Localized(@"任务仍在进行中，请等待完成。", @"Task is still running. Please wait for completion.");
+    [self requestCancelIfNeeded];
     return NSTerminateCancel;
 }
 
@@ -103,8 +104,7 @@ static NSString *SanitizeOutput(NSString *value) {
     if (self.finished || !self.taskStarted || self.task == nil || !self.task.running) {
         return YES;
     }
-    NSBeep();
-    self.statusLabel.stringValue = Localized(@"任务仍在进行中，请等待完成。", @"Task is still running. Please wait for completion.");
+    [self requestCancelIfNeeded];
     return NO;
 }
 
@@ -210,8 +210,8 @@ static NSString *SanitizeOutput(NSString *value) {
 
     self.closeButton = [[NSButton alloc] initWithFrame:NSMakeRect(552, 28, 120, 36)];
     self.closeButton.bezelStyle = NSBezelStyleRounded;
-    self.closeButton.title = Localized(@"关闭", @"Close");
-    self.closeButton.enabled = NO;
+    self.closeButton.title = Localized(@"取消", @"Cancel");
+    self.closeButton.enabled = YES;
     self.closeButton.target = self;
     self.closeButton.action = @selector(onClose:);
     [content addSubview:self.closeButton];
@@ -319,6 +319,7 @@ static NSString *SanitizeOutput(NSString *value) {
         return;
     }
     self.taskStarted = YES;
+    setpgid(self.task.processIdentifier, self.task.processIdentifier);
 }
 
 - (void)consumeOutputData:(NSData *)data {
@@ -436,11 +437,21 @@ static NSString *SanitizeOutput(NSString *value) {
     }
     self.finished = YES;
     self.closeButton.enabled = YES;
+    self.closeButton.title = Localized(@"关闭", @"Close");
     if (!self.sawProgress) {
         self.progressBar.indeterminate = NO;
         self.progressBar.minValue = 0;
         self.progressBar.maxValue = 100;
         [self.progressBar stopAnimation:nil];
+    }
+    if (self.cancellationRequested) {
+        self.progressBar.doubleValue = 0;
+        self.statusLabel.stringValue = Localized(
+            [self.config.mode isEqualToString:@"uninstall"] ? @"卸载已取消。" : @"安装已取消。",
+            [self.config.mode isEqualToString:@"uninstall"] ? @"Uninstall cancelled." : @"Installation cancelled."
+        );
+        [self appendLog:[NSString stringWithFormat:@"[WARN] %@\n", self.statusLabel.stringValue]];
+        return;
     }
     if (status == 0) {
         self.progressBar.doubleValue = 100;
@@ -513,7 +524,82 @@ static NSString *SanitizeOutput(NSString *value) {
 
 - (void)onClose:(id)sender {
     (void)sender;
+    if (!self.finished && self.taskStarted && self.task != nil && self.task.running) {
+        [self requestCancelIfNeeded];
+        return;
+    }
     [NSApp terminate:nil];
+}
+
+- (BOOL)requestCancelIfNeeded {
+    if (self.finished || !self.taskStarted || self.task == nil || !self.task.running) {
+        return YES;
+    }
+    if (self.cancellationRequested) {
+        self.statusLabel.stringValue = Localized(@"正在取消，请稍候…", @"Cancelling, please wait...");
+        return NO;
+    }
+
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.alertStyle = NSAlertStyleWarning;
+    if ([self.config.mode isEqualToString:@"uninstall"]) {
+        alert.messageText = Localized(@"确认取消卸载", @"Cancel Uninstall?");
+        alert.informativeText = Localized(
+            @"当前卸载任务仍在运行。现在取消会停止任务，并尽量保留已存在的文件。",
+            @"The uninstall task is still running. Cancelling now will stop it and preserve existing files as much as possible."
+        );
+    } else {
+        alert.messageText = Localized(@"确认取消安装", @"Cancel Installation?");
+        alert.informativeText = Localized(
+            @"当前安装任务仍在运行。现在取消会停止任务，并清理本次安装已产生的文件。",
+            @"The installation task is still running. Cancelling now will stop it and clean up files created by this install."
+        );
+    }
+    [alert addButtonWithTitle:Localized(@"继续取消", @"Cancel Task")];
+    [alert addButtonWithTitle:Localized(@"继续等待", @"Keep Running")];
+    if ([alert runModal] != NSAlertFirstButtonReturn) {
+        return NO;
+    }
+    [self cancelRunningTask];
+    return NO;
+}
+
+- (void)cancelRunningTask {
+    if (self.cancellationRequested || self.task == nil || !self.task.running) {
+        return;
+    }
+    self.cancellationRequested = YES;
+    self.statusLabel.stringValue = Localized(@"正在取消并清理安装文件…", @"Cancelling and cleaning up installation files...");
+    self.closeButton.enabled = NO;
+    self.actionButton.enabled = NO;
+    self.secondaryActionButton.enabled = NO;
+    [self appendLog:[NSString stringWithFormat:@"[Step] %@\n",
+                     Localized(@"用户请求取消，正在终止任务并回滚。", @"Cancellation requested. Stopping task and rolling back.")]];
+
+    pid_t pid = (pid_t)self.task.processIdentifier;
+    if (pid > 0) {
+        killpg(pid, SIGTERM);
+    }
+    @try {
+        [self.task terminate];
+    } @catch (__unused NSException *exc) {
+    }
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (weakSelf == nil || weakSelf.task == nil || !weakSelf.task.running) {
+            return;
+        }
+        weakSelf.statusLabel.stringValue = Localized(@"取消中，正在强制结束安装任务…", @"Still cancelling, force-stopping the task...");
+        pid_t runningPid = (pid_t)weakSelf.task.processIdentifier;
+        if (runningPid > 0) {
+            killpg(runningPid, SIGKILL);
+        }
+        @try {
+            [weakSelf.task interrupt];
+        } @catch (__unused NSException *exc) {
+        }
+    });
 }
 
 - (void)onPrimaryAction:(id)sender {

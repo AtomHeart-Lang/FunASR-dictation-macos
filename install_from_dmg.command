@@ -6,7 +6,11 @@ INSTALL_ROOT="$HOME/Library/Application Support/FunASRDictation"
 APP_DIR="$INSTALL_ROOT/app"
 PAYLOAD_ARCHIVE="$SCRIPT_DIR/funasr-dictation-payload.tar.gz"
 BACKUP_DIR=""
+BACKUP_PYTHON_DIR=""
+BACKUP_LAUNCHER_APP=""
+BACKUP_UNINSTALLER_APP=""
 RESTORE_ON_ERROR=1
+CANCELLED=0
 LOG_FILE="$INSTALL_ROOT/install.log"
 
 is_chinese_locale() {
@@ -38,18 +42,44 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 cleanup() {
   rm -rf "$TMP_DIR"
   if [[ "$RESTORE_ON_ERROR" -eq 1 ]]; then
+    rm -rf "$APP_DIR"
+    rm -rf "$INSTALL_ROOT/python-runtime"
+    rm -rf "$HOME/Applications/FunASR Dictation.app"
+    rm -rf "$HOME/Applications/Uninstall FunASR Dictation.app"
     if [[ -n "$BACKUP_DIR" && -d "$BACKUP_DIR" ]]; then
-      rm -rf "$APP_DIR"
       mv "$BACKUP_DIR" "$APP_DIR"
-      echo "[WARN] $(localize "安装失败，已恢复之前的安装版本。" "Installation failed. Restored previous installation.")"
-    else
-      rm -rf "$APP_DIR"
+      echo "[WARN] $(localize "安装失败，已恢复之前的应用版本。" "Installation failed. Restored the previous app version.")"
+    fi
+    if [[ -n "$BACKUP_PYTHON_DIR" && -d "$BACKUP_PYTHON_DIR" ]]; then
+      mv "$BACKUP_PYTHON_DIR" "$INSTALL_ROOT/python-runtime"
+      echo "[WARN] $(localize "安装失败，已恢复之前的 Python 运行时。" "Installation failed. Restored the previous Python runtime.")"
+    fi
+    if [[ -n "$BACKUP_LAUNCHER_APP" && -d "$BACKUP_LAUNCHER_APP" ]]; then
+      mv "$BACKUP_LAUNCHER_APP" "$HOME/Applications/FunASR Dictation.app"
+    fi
+    if [[ -n "$BACKUP_UNINSTALLER_APP" && -d "$BACKUP_UNINSTALLER_APP" ]]; then
+      mv "$BACKUP_UNINSTALLER_APP" "$HOME/Applications/Uninstall FunASR Dictation.app"
     fi
   elif [[ -n "$BACKUP_DIR" && -d "$BACKUP_DIR" ]]; then
     rm -rf "$BACKUP_DIR"
+    rm -rf "$BACKUP_PYTHON_DIR"
+    rm -rf "$BACKUP_LAUNCHER_APP"
+    rm -rf "$BACKUP_UNINSTALLER_APP"
   fi
 }
 trap cleanup EXIT
+
+on_cancel() {
+  CANCELLED=1
+  RESTORE_ON_ERROR=1
+  echo
+  echo "[WARN] $(localize "检测到用户取消，正在停止安装并清理已产生的文件。" "Cancellation requested. Stopping installation and cleaning up generated files.")"
+  pkill -TERM -P $$ >/dev/null 2>&1 || true
+  sleep 0.2
+  pkill -KILL -P $$ >/dev/null 2>&1 || true
+  exit 130
+}
+trap on_cancel INT TERM
 
 on_error() {
   local exit_code="$1"
@@ -90,6 +120,21 @@ if [[ -d "$APP_DIR" ]]; then
   mv "$APP_DIR" "$BACKUP_DIR"
 fi
 
+if [[ -d "$INSTALL_ROOT/python-runtime" ]]; then
+  BACKUP_PYTHON_DIR="$INSTALL_ROOT/python-runtime.backup.$(date +%s)"
+  mv "$INSTALL_ROOT/python-runtime" "$BACKUP_PYTHON_DIR"
+fi
+
+if [[ -d "$HOME/Applications/FunASR Dictation.app" ]]; then
+  BACKUP_LAUNCHER_APP="$INSTALL_ROOT/launcher.backup.$(date +%s)"
+  mv "$HOME/Applications/FunASR Dictation.app" "$BACKUP_LAUNCHER_APP"
+fi
+
+if [[ -d "$HOME/Applications/Uninstall FunASR Dictation.app" ]]; then
+  BACKUP_UNINSTALLER_APP="$INSTALL_ROOT/uninstaller.backup.$(date +%s)"
+  mv "$HOME/Applications/Uninstall FunASR Dictation.app" "$BACKUP_UNINSTALLER_APP"
+fi
+
 mv "$PAYLOAD_APP_DIR" "$APP_DIR"
 
 if [[ -n "$BACKUP_DIR" && -f "$BACKUP_DIR/config.toml" && ! -f "$APP_DIR/config.toml" ]]; then
@@ -97,6 +142,8 @@ if [[ -n "$BACKUP_DIR" && -f "$BACKUP_DIR/config.toml" && ! -f "$APP_DIR/config.
 fi
 
 cd "$APP_DIR"
+
+export SVD_BUNDLED_PYTHON_DIR="$APP_DIR/bundled_python"
 
 emit_progress 20 "$(localize "安装运行环境和依赖" "Installing runtime and dependencies")"
 echo "[Step] $(localize "安装运行环境并下载最新模型" "Installing runtime and downloading latest model")"

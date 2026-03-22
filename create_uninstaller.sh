@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="Uninstall FunASR Dictation"
-APP_VERSION="1.0.2"
+APP_VERSION="1.0.3"
 APP_BUNDLE="$HOME/Applications/$APP_NAME.app"
 APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
 RUNTIME_PATH_FILE="$APP_SUPPORT_DIR/runtime_app_dir.txt"
@@ -126,5 +126,10 @@ if [[ -f "$ICON_SRC" ]]; then
 fi
 
 codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null 2>&1 || true
+
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+if [[ -x "$LSREGISTER" ]]; then
+  "$LSREGISTER" -f "$APP_BUNDLE" >/dev/null 2>&1 || true
+fi
 
 echo "[OK] Uninstaller app created: $APP_BUNDLE"

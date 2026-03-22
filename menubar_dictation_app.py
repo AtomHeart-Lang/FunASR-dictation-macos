@@ -6,6 +6,7 @@ import json
 import logging
 import objc
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -33,6 +34,8 @@ from AppKit import (
     NSColor,
     NSFont,
     NSImage,
+    NSImageLeft,
+    NSImageScaleProportionallyDown,
     NSImageView,
     NSMakeRect,
     NSMakeSize,
@@ -82,7 +85,7 @@ FUNASR_RUNTIME_DIR = APP_DIR / "funasr_nano_runtime"
 FUNASR_REMOTE_CODE_PATH = FUNASR_RUNTIME_DIR / "model.py"
 MENU_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
 APP_ICON = str((APP_DIR / "assets" / "app_launcher_icon.png").resolve())
-APP_BUILD = "2026-03-21-v1.0.2"
+APP_BUILD = "2026-03-22-v1.0.3"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 DEFAULT_NCPU = max(1, int(os.environ.get("SVD_NCPU", "2")))
@@ -3040,13 +3043,23 @@ class SenseVoiceMenuBarApp(rumps.App):
         if self._menu_icon_ns is not None:
             return self._menu_icon_ns
         try:
-            if not Path(MENU_ICON).exists():
-                return None
-            icon = NSImage.alloc().initWithContentsOfFile_(MENU_ICON)
-            if icon is None:
-                return None
-            icon.setTemplate_(True)
-            icon.setSize_(NSMakeSize(18.0, 18.0))
+            mac_version = platform.mac_ver()[0]
+            major = int(mac_version.split(".")[0]) if mac_version else 0
+            if major and major <= 14:
+                icon = _app_icon_image(rounded=True)
+                if icon is None:
+                    return None
+                icon = icon.copy()
+                icon.setTemplate_(False)
+                icon.setSize_(NSMakeSize(18.0, 18.0))
+            else:
+                if not Path(MENU_ICON).exists():
+                    return None
+                icon = NSImage.alloc().initWithContentsOfFile_(MENU_ICON)
+                if icon is None:
+                    return None
+                icon.setTemplate_(True)
+                icon.setSize_(NSMakeSize(18.0, 18.0))
             self._menu_icon_ns = icon
             return self._menu_icon_ns
         except Exception as exc:
@@ -3082,6 +3095,14 @@ class SenseVoiceMenuBarApp(rumps.App):
                 button = None
             if button is not None:
                 button.setTitle_(self.title or "○")
+                try:
+                    button.setImagePosition_(NSImageLeft)
+                except Exception:
+                    pass
+                try:
+                    button.setImageScaling_(NSImageScaleProportionallyDown)
+                except Exception:
+                    pass
                 if button.image() is None:
                     icon = self._menu_icon_image()
                     if icon is not None:
@@ -3107,6 +3128,13 @@ class SenseVoiceMenuBarApp(rumps.App):
 
     def on_engine_status(self, status: str) -> None:
         with self.status_lock:
+            if self.current_status == "ERROR" and not self.dictation_enabled and status in {"LOADING", "READY"}:
+                logging.info(
+                    "suppress engine status transition %s -> %s while trigger is disabled",
+                    self.current_status,
+                    status,
+                )
+                return
             self.current_status = status
 
     def _queue_alert(self, text: str) -> None:
@@ -3127,7 +3155,7 @@ class SenseVoiceMenuBarApp(rumps.App):
             self.enable_dictation(show_alert=False, request_prompt=False)
         if self.pending_startup_enable:
             self.pending_startup_enable = False
-            self.enable_dictation(show_alert=False, request_prompt=False)
+            self.enable_dictation(show_alert=True, request_prompt=True)
 
     def on_trigger(self) -> None:
         if not self.dictation_enabled or self.updating_model:
