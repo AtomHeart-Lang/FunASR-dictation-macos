@@ -34,6 +34,37 @@ emit_progress() {
   echo "[Progress] $percent $*" >&2
 }
 
+clear_runtime_quarantine() {
+  if ! command -v xattr >/dev/null 2>&1; then
+    return 0
+  fi
+  xattr -dr com.apple.quarantine "$RUNTIME_ROOT" >/dev/null 2>&1 || true
+}
+
+sign_runtime_macho_files() {
+  if ! command -v codesign >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local path macho_info
+  while IFS= read -r -d '' path; do
+    macho_info="$(file -b "$path" 2>/dev/null || true)"
+    [[ "$macho_info" == *"Mach-O"* ]] || continue
+    if ! codesign --force --sign - --timestamp=none "$path" >/dev/null 2>&1; then
+      echo "[WARN] $(localize "无法对运行时文件做 ad-hoc 签名：$path" "Could not ad-hoc sign runtime file: $path")" >&2
+    fi
+  done < <(find "$RUNTIME_ROOT" -type f -print0)
+}
+
+prepare_runtime_for_execution() {
+  emit_progress 34 "$(localize "清理 Python 运行时的 Gatekeeper 标记" "Clearing Gatekeeper flags for Python runtime")"
+  echo "[Step] $(localize "清理 Python 运行时的 Gatekeeper 标记" "Clearing Gatekeeper flags for Python runtime")" >&2
+  clear_runtime_quarantine
+  echo "[Step] $(localize "为 Python 运行时做本地 ad-hoc 签名" "Applying local ad-hoc signing to Python runtime")" >&2
+  sign_runtime_macho_files
+  clear_runtime_quarantine
+}
+
 pick_asset() {
   local arch
   arch="$(uname -m)"
@@ -177,6 +208,7 @@ echo "[Step] $(localize "解压独立 Python 运行时" "Extracting standalone P
 rm -rf "$RUNTIME_ROOT"
 mkdir -p "$RUNTIME_ROOT"
 tar -xzf "$ARCHIVE_PATH" -C "$RUNTIME_ROOT"
+prepare_runtime_for_execution
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
   echo "[ERROR] $(localize "独立 Python 已解压，但未找到可执行文件：$PYTHON_BIN" "Standalone Python extracted, but executable not found: $PYTHON_BIN")" >&2
