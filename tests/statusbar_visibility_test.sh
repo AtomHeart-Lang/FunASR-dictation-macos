@@ -8,11 +8,15 @@ from pathlib import Path
 repo = Path(os.environ['REPO_DIR'])
 source = (repo / 'menubar_dictation_app.py').read_text(encoding='utf-8')
 
-assert 'import platform' in source
-assert 'major and major <= 14' in source
+assert 'import platform' not in source
+assert 'Path(MENU_ICON).exists()' in source
+assert 'icon.setTemplate_(True)' in source
 assert '_app_icon_image(rounded=True)' in source
 assert 'button.setImagePosition_(NSImageLeft)' in source
 assert 'button.setImageScaling_(NSImageScaleProportionallyDown)' in source
+assert 'nsstatusitem.setImage_(icon)' in source
+assert 'button.setImage_(icon)' in source
+assert 'button.setNeedsDisplay_(True)' in source
 assert 'suppress engine status transition' in source
 assert 'self.enable_dictation(show_alert=True, request_prompt=True)' in source
 assert 'NSApplicationActivationPolicyRegular' in source

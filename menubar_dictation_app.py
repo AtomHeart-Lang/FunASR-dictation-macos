@@ -6,7 +6,6 @@ import json
 import logging
 import objc
 import os
-import platform
 import re
 import shutil
 import subprocess
@@ -86,7 +85,7 @@ FUNASR_RUNTIME_DIR = APP_DIR / "funasr_nano_runtime"
 FUNASR_REMOTE_CODE_PATH = FUNASR_RUNTIME_DIR / "model.py"
 MENU_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
 APP_ICON = str((APP_DIR / "assets" / "app_launcher_icon.png").resolve())
-APP_BUILD = "2026-03-29-v1.0.5"
+APP_BUILD = "2026-03-29-v1.0.6"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 DEFAULT_NCPU = max(1, int(os.environ.get("SVD_NCPU", "2")))
@@ -3053,22 +3052,18 @@ class SenseVoiceMenuBarApp(rumps.App):
         if self._menu_icon_ns is not None:
             return self._menu_icon_ns
         try:
-            mac_version = platform.mac_ver()[0]
-            major = int(mac_version.split(".")[0]) if mac_version else 0
-            if major and major <= 14:
+            if Path(MENU_ICON).exists():
+                icon = NSImage.alloc().initWithContentsOfFile_(MENU_ICON)
+                if icon is None:
+                    return None
+                icon.setTemplate_(True)
+                icon.setSize_(NSMakeSize(18.0, 18.0))
+            else:
                 icon = _app_icon_image(rounded=True)
                 if icon is None:
                     return None
                 icon = icon.copy()
                 icon.setTemplate_(False)
-                icon.setSize_(NSMakeSize(18.0, 18.0))
-            else:
-                if not Path(MENU_ICON).exists():
-                    return None
-                icon = NSImage.alloc().initWithContentsOfFile_(MENU_ICON)
-                if icon is None:
-                    return None
-                icon.setTemplate_(True)
                 icon.setSize_(NSMakeSize(18.0, 18.0))
             self._menu_icon_ns = icon
             return self._menu_icon_ns
@@ -3084,6 +3079,7 @@ class SenseVoiceMenuBarApp(rumps.App):
             nsstatusitem = getattr(nsapp, "nsstatusitem", None)
             if nsstatusitem is None:
                 return
+            icon = self._menu_icon_image()
             try:
                 nsstatusitem.setVisible_(True)
             except Exception:
@@ -3094,10 +3090,8 @@ class SenseVoiceMenuBarApp(rumps.App):
                 nsstatusitem.setHighlightMode_(True)
             except Exception:
                 pass
-            if nsstatusitem.image() is None:
-                icon = self._menu_icon_image()
-                if icon is not None:
-                    nsstatusitem.setImage_(icon)
+            if icon is not None:
+                nsstatusitem.setImage_(icon)
             # Some macOS versions only render updates reliably via status button.
             try:
                 button = nsstatusitem.button()
@@ -3113,10 +3107,13 @@ class SenseVoiceMenuBarApp(rumps.App):
                     button.setImageScaling_(NSImageScaleProportionallyDown)
                 except Exception:
                     pass
-                if button.image() is None:
-                    icon = self._menu_icon_image()
-                    if icon is not None:
-                        button.setImage_(icon)
+                if icon is not None:
+                    button.setImage_(icon)
+                try:
+                    button.setNeedsDisplay_(True)
+                    button.display()
+                except Exception:
+                    pass
             if not self._status_item_ready_logged:
                 self._status_item_ready_logged = True
                 hidden = None
