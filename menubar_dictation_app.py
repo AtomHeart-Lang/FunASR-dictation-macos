@@ -27,6 +27,7 @@ from AppKit import (
     NSAlertFirstButtonReturn,
     NSApplication,
     NSApplicationActivationPolicyAccessory,
+    NSApplicationActivationPolicyRegular,
     NSBezierPath,
     NSBezelBorder,
     NSButton,
@@ -85,7 +86,7 @@ FUNASR_RUNTIME_DIR = APP_DIR / "funasr_nano_runtime"
 FUNASR_REMOTE_CODE_PATH = FUNASR_RUNTIME_DIR / "model.py"
 MENU_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
 APP_ICON = str((APP_DIR / "assets" / "app_launcher_icon.png").resolve())
-APP_BUILD = "2026-03-23-v1.0.4"
+APP_BUILD = "2026-03-29-v1.0.5"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 DEFAULT_NCPU = max(1, int(os.environ.get("SVD_NCPU", "2")))
@@ -370,12 +371,12 @@ I18N = {
         "en": "Legacy launch-at-login config detected but migration failed. Please toggle Enable Launch At Login off and on once.",
     },
     "permission_event_tap_failed": {
-        "zh": "无法创建键盘监听（event tap）。这通常是权限归属问题。\n请按以下步骤重试：\n1) ./remove_launcher.sh\n2) ./create_launcher.sh\n3) 双击 FunASR Dictation.app 启动一次（不要用终端）\n4) 在系统设置中给 “FunASR Dictation” 勾选 Accessibility 和 Input Monitoring。\n当前 Python: {python}",
-        "en": "Failed to create keyboard event tap. This is usually a permission-attribution issue.\nPlease retry with:\n1) ./remove_launcher.sh\n2) ./create_launcher.sh\n3) Launch once by double-clicking FunASR Dictation.app (not Terminal)\n4) Re-enable Accessibility and Input Monitoring for \"FunASR Dictation\" in System Settings.\nCurrent Python: {python}",
+        "zh": "当前没有获得所需权限。\n请在“系统设置 -> 隐私与安全性”中为 FunASR Dictation 打开：\n• 输入监控\n• 辅助功能\n\n授权后，请从 Dock 或状态栏菜单退出程序，再从 Applications 重新打开 FunASR Dictation。",
+        "en": "Required permissions are not granted.\nIn System Settings -> Privacy & Security, enable these permissions for FunASR Dictation:\n• Input Monitoring\n• Accessibility\n\nAfter granting them, quit the app from the Dock or menu bar, then reopen FunASR Dictation from Applications.",
     },
     "permission_hint": {
-        "zh": "监听权限可能未生效。请从桌面或 Applications 双击 FunASR Dictation.app 启动，并在 系统设置 -> 隐私与安全性 -> 输入监控 / 辅助功能 中勾选对应条目后重启应用。若列表里没有 FunASR Dictation，请同时检查并放行 Python。",
-        "en": "Input-monitoring permissions may not be effective. Launch from FunASR Dictation.app (Desktop/Applications), then enable entries under System Settings -> Privacy & Security -> Input Monitoring / Accessibility and restart. If FunASR Dictation is not listed, also allow Python.",
+        "zh": "相关权限可能尚未生效。\n请在“系统设置 -> 隐私与安全性”中确认 FunASR Dictation 已开启“输入监控”和“辅助功能”，然后从 Dock 或状态栏菜单退出程序，再从 Applications 重新打开。",
+        "en": "The required permissions may not be active yet.\nIn System Settings -> Privacy & Security, confirm that FunASR Dictation has both Input Monitoring and Accessibility enabled, then quit the app from the Dock or menu bar and reopen it from Applications.",
     },
     "silent_audio_hint": {
         "zh": "检测到录音为静音（音量全为 0）。请检查：\n1) 系统设置 -> 隐私与安全性 -> 麦克风，是否允许 FunASR Dictation / Python\n2) 系统设置 -> 声音 -> 输入，是否选中了正确麦克风\n3) 麦克风本身是否被静音或被其他软件占用",
@@ -386,6 +387,7 @@ I18N = {
         "zh": "FunASR Dictation 已在菜单栏运行。",
         "en": "FunASR Dictation is already running in the menu bar.",
     },
+    "menu_open_uninstaller": {"zh": "打开卸载程序", "en": "Open Uninstaller"},
 }
 
 
@@ -1679,6 +1681,10 @@ def _effective_autostart_plist() -> Path:
     if LEGACY_AUTOSTART_PLIST.exists():
         return LEGACY_AUTOSTART_PLIST
     return AUTOSTART_PLIST
+
+
+def _uninstaller_app_path() -> Path:
+    return Path.home() / "Applications" / "Uninstall FunASR Dictation.app"
 
 
 def is_os_autostart_enabled() -> bool:
@@ -2986,6 +2992,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.pending_startup_enable = False
         self.permission_hint_shown = False
         self.permission_error_alert_shown = False
+        self.regular_mode_for_error = False
         self.last_published_title = ""
         self._status_item_ready_logged = False
         self._status_item_enforce_warned = False
@@ -3003,6 +3010,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.auto_on_item = rumps.MenuItem("Enable Dictation On App Start")
         self.launch_login_item = rumps.MenuItem("Enable Launch At Login")
         self.language_item = rumps.MenuItem("Switch Language / 语言")
+        self.open_uninstaller_item = rumps.MenuItem("Open Uninstaller")
         self.build_item = rumps.MenuItem(f'{tr("build_prefix")}: {APP_BUILD}')
 
         self.menu = [
@@ -3016,6 +3024,7 @@ class SenseVoiceMenuBarApp(rumps.App):
             self.auto_on_item,
             self.launch_login_item,
             self.language_item,
+            self.open_uninstaller_item,
             self.build_item,
             None,
             "Quit App",
@@ -3026,6 +3035,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.update_model_item = self.menu["Update Model"]
         self.quit_item = self.menu["Quit App"]
         self.language_item = self.menu["Switch Language / 语言"]
+        self.open_uninstaller_item = self.menu["Open Uninstaller"]
 
         self.refresh_ui_labels()
         self._migrate_autostart_if_needed()
@@ -3126,6 +3136,36 @@ class SenseVoiceMenuBarApp(rumps.App):
                 self._status_item_enforce_warned = True
                 logging.warning("status item enforce failed: %s", exc)
 
+    def _set_error_visibility_mode(self) -> None:
+        if self.regular_mode_for_error:
+            return
+        try:
+            app = NSApplication.sharedApplication()
+            app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
+            try:
+                app.activateIgnoringOtherApps_(True)
+            except Exception:
+                pass
+            self.regular_mode_for_error = True
+            logging.info("app visibility switched to REGULAR for permission recovery")
+        except Exception as exc:
+            logging.warning("failed to switch app visibility to REGULAR: %s", exc)
+
+    def _restore_menu_bar_visibility_mode(self) -> None:
+        if not self.regular_mode_for_error:
+            return
+        try:
+            app = NSApplication.sharedApplication()
+            app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+            try:
+                app.unhideWithoutActivation()
+            except Exception:
+                pass
+            self.regular_mode_for_error = False
+            logging.info("app visibility restored to ACCESSORY")
+        except Exception as exc:
+            logging.warning("failed to restore app visibility to ACCESSORY: %s", exc)
+
     def on_engine_status(self, status: str) -> None:
         with self.status_lock:
             if self.current_status == "ERROR" and not self.dictation_enabled and status in {"LOADING", "READY"}:
@@ -3173,6 +3213,7 @@ class SenseVoiceMenuBarApp(rumps.App):
             else:
                 self.trigger.start_keyboard(self.ui_settings.keyboard_hotkey)
             self.dictation_enabled = True
+            self._restore_menu_bar_visibility_mode()
             self.engine.warmup_async()
             self.on_engine_status("LOADING")
             self.permission_hint_shown = False
@@ -3181,6 +3222,7 @@ class SenseVoiceMenuBarApp(rumps.App):
             logging.exception("enable_dictation failed: %s", exc)
             self.dictation_enabled = False
             self.on_engine_status("ERROR")
+            self._set_error_visibility_mode()
             if (
                 show_alert
                 and "Failed to create keyboard event tap" in str(exc)
@@ -3217,6 +3259,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.auto_on_item.title = tr("menu_auto_on")
         self.launch_login_item.title = tr("menu_launch_login")
         self.language_item.title = tr("menu_switch_language")
+        self.open_uninstaller_item.title = tr("menu_open_uninstaller")
         self.toggle_item.title = tr("menu_toggle")
         self.hotkey_settings_item.title = tr("menu_hotkey_settings")
         self.model_config_item.title = tr("menu_model_config")
@@ -3483,6 +3526,20 @@ class SenseVoiceMenuBarApp(rumps.App):
         set_app_language(self.ui_settings.app_language)
         save_ui_settings(self.ui_settings)
         self.refresh_ui_labels()
+
+    @rumps.clicked("Open Uninstaller")
+    def on_open_uninstaller(self, sender):
+        app_path = _uninstaller_app_path()
+        if not app_path.exists():
+            ui_alert_native(
+                f"{tr('menu_open_uninstaller')}: {app_path}",
+                title=tr("app_name"),
+            )
+            return
+        try:
+            subprocess.Popen(["open", str(app_path)])
+        except Exception as exc:
+            ui_alert_native(f"{tr('menu_open_uninstaller')}: {exc}", title=tr("app_name"))
 
     @rumps.clicked("Quit App")
     def on_quit(self, _):

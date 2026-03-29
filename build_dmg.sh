@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="FunASR Dictation"
-APP_VERSION="1.0.4"
+APP_VERSION="1.0.5"
 INSTALLER_APP_NAME="Install FunASR Dictation.app"
 DMG_NAME="funasr-dictation-installer-${APP_VERSION}.dmg"
 WORK_DIR="$(mktemp -d /tmp/funasr-dmg.XXXXXX)"
@@ -18,6 +18,7 @@ TASK_RUNNER_BIN="$WORK_DIR/TaskProgressApp"
 PYTHON_RELEASE_TAG="20260303"
 PYTHON_VERSION="3.11.15+20260303"
 BUNDLED_PYTHON_DIR="$PAYLOAD_APP_DIR/bundled_python"
+LOCAL_BUNDLED_PYTHON_CACHE="$HOME/Library/Application Support/FunASRDictation/app/bundled_python"
 
 cleanup() {
   rm -rf "$WORK_DIR"
@@ -31,7 +32,12 @@ download_python_asset() {
   local url="https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_RELEASE_TAG}/${archive//+/%%2B}"
   url="${url//%%2B/%2B}"
   local target="$BUNDLED_PYTHON_DIR/$archive"
+  local cached="$LOCAL_BUNDLED_PYTHON_CACHE/$archive"
   mkdir -p "$BUNDLED_PYTHON_DIR"
+  if [[ -f "$cached" ]]; then
+    cp "$cached" "$target"
+    return 0
+  fi
   curl --fail --location --retry 3 --retry-all-errors --connect-timeout 20 "$url" -o "$target"
 }
 
