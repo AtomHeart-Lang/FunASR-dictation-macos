@@ -20,6 +20,9 @@ assert "startup_notice_title" in source
 assert "startup_notice_body" in source
 assert "already_running_hidden_hint" in source
 assert "show_startup_notice" in source
+assert "applicationShouldHandleReopen_hasVisibleWindows_" in source
+assert "show_already_running_notice" in source
+assert "self.engine.warmup_async()" not in source.split("if self.ui_settings.enable_dictation_on_app_start:", 1)[1].split("def _menu_icon_image", 1)[0]
 assert "manual" in launcher and "startup_context.json" in launcher
 assert "autostart" in autostart and "startup_context.json" in autostart
 

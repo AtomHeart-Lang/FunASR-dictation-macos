@@ -21,6 +21,7 @@ import pyperclip
 import Quartz
 import rumps
 import sounddevice as sd
+from rumps.rumps import NSApp as RumpsNSApp
 from AppKit import (
     NSAlert,
     NSAlertFirstButtonReturn,
@@ -688,6 +689,26 @@ def show_startup_notice(*, manual_close: bool) -> None:
     closer = _WindowTimerTarget.alloc().initWithWindow_(window)
     _WINDOW_TIMER_TARGETS.append(closer)
     closer.performSelector_withObject_afterDelay_("fire:", None, 5.0)
+
+
+def _install_reopen_handler() -> None:
+    if hasattr(RumpsNSApp, "applicationShouldHandleReopen_hasVisibleWindows_"):
+        return
+
+    def applicationShouldHandleReopen_hasVisibleWindows_(self, _app, _flag):
+        app_instance = getattr(rumps.App, "*app_instance", None)
+        if app_instance is not None and hasattr(app_instance, "show_already_running_notice"):
+            try:
+                app_instance.show_already_running_notice()
+            except Exception:
+                logging.exception("reopen handler failed")
+        return True
+
+    setattr(
+        RumpsNSApp,
+        "applicationShouldHandleReopen_hasVisibleWindows_",
+        applicationShouldHandleReopen_hasVisibleWindows_,
+    )
 
 
 def _make_dialog_text(
@@ -3235,11 +3256,6 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.refresh_ui_labels()
 
         if self.ui_settings.enable_dictation_on_app_start:
-            # Show menubar status immediately, then enable in runloop.
-            self.on_engine_status("LOADING")
-            self.title = "…"
-            self.status_item.title = f'{tr("status_prefix")}: {localized_status("LOADING")}'
-            self.engine.warmup_async()
             self.pending_startup_enable = True
 
     def _menu_icon_image(self) -> Optional[NSImage]:
@@ -3394,6 +3410,9 @@ class SenseVoiceMenuBarApp(rumps.App):
             if mode == "auto_close":
                 self.startup_state.first_launch_notice_shown = True
                 save_startup_state(self.startup_state)
+
+    def show_already_running_notice(self) -> None:
+        ui_alert_native(tr("already_running_hidden_hint"), title=tr("app_name"))
 
     def on_trigger(self) -> None:
         if not self.dictation_enabled or self.updating_model:
@@ -3783,6 +3802,7 @@ def main() -> None:
     except Exception:
         pass
 
+    _install_reopen_handler()
     log_runtime_context()
 
     app = SenseVoiceMenuBarApp()
