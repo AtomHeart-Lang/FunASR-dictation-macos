@@ -26,6 +26,9 @@ assert 'self._set_error_visibility_mode()' in source
 assert 'self._restore_menu_bar_visibility_mode()' in source
 assert 'menu_open_uninstaller' in source
 assert '@rumps.clicked("Open Uninstaller")' in source
+assert 'self.pending_startup_enable = True' in source
+assert 'self.engine.warmup_async()' not in source.split('if self.ui_settings.enable_dictation_on_app_start:', 1)[1].split('def _menu_icon_image', 1)[0]
+assert 'self.title = "○"' in source or 'title="○"' in source
 
 print('[PASS] statusbar visibility logic')
 PY
