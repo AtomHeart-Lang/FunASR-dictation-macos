@@ -42,6 +42,7 @@ from AppKit import (
     NSProgressIndicator,
     NSProgressIndicatorStyleSpinning,
     NSRadioButton,
+    NSScreen,
     NSScrollView,
     NSSwitchButton,
     NSTextField,
@@ -51,6 +52,7 @@ from AppKit import (
     NSView,
     NSWindow,
     NSWindowStyleMaskTitled,
+    NSWindowStyleMaskClosable,
     NSBackingStoreBuffered,
 )
 from Foundation import NSBundle, NSDate, NSLocale, NSObject, NSRunLoop
@@ -77,6 +79,8 @@ APP_SUPPORT_DIR = Path.home() / "Library/Application Support/SenseVoiceDictation
 CONFIG_PATH = APP_DIR / "config.toml"
 LEGACY_UI_SETTINGS_PATH = APP_DIR / "ui_settings.json"
 UI_SETTINGS_PATH = APP_SUPPORT_DIR / "ui_settings.json"
+STARTUP_STATE_PATH = APP_SUPPORT_DIR / "startup_state.json"
+STARTUP_CONTEXT_PATH = APP_SUPPORT_DIR / "startup_context.json"
 LOG_PATH = APP_DIR / "menubar_debug.log"
 LOCK_PATH = APP_DIR / "menubar_app.lock"
 MODEL_NAME = "FunAudioLLM/Fun-ASR-Nano-2512"
@@ -115,7 +119,7 @@ LEGACY_AUTOSTART_PLIST = Path.home() / "Library/LaunchAgents/com.lee.sensevoice.
 AUTOSTART_RUNNER = (
     Path.home() / "Library/Application Support/SenseVoiceDictation/autostart_runner.sh"
 )
-AUTOSTART_RUNNER_VERSION = "3"
+AUTOSTART_RUNNER_VERSION = "4"
 ENABLE_AUTOSTART_SCRIPT = APP_DIR / "enable_autostart.sh"
 DISABLE_AUTOSTART_SCRIPT = APP_DIR / "disable_autostart.sh"
 MODEL_CACHE_DIRS = [
@@ -131,6 +135,8 @@ _APP_ICON_CACHE: Optional[NSImage] = None
 _APP_ICON_ROUNDED_CACHE: Optional[NSImage] = None
 _BLANK_ALERT_ICON: Optional[NSImage] = None
 _BUTTON_CALLBACK_TARGETS: List[object] = []
+_WINDOW_TIMER_TARGETS: List[object] = []
+_STARTUP_NOTICE_WINDOW: Optional[NSWindow] = None
 
 
 class _ButtonCallbackTarget(NSObject):
@@ -143,6 +149,26 @@ class _ButtonCallbackTarget(NSObject):
 
     def invoke_(self, sender) -> None:
         self._callback(sender)
+
+
+class _WindowTimerTarget(NSObject):
+    def initWithWindow_(self, window):
+        self = objc.super(_WindowTimerTarget, self).init()
+        if self is None:
+            return None
+        self._window = window
+        return self
+
+    def fire_(self, _sender) -> None:
+        try:
+            if self._window is not None:
+                self._window.orderOut_(None)
+                self._window.close()
+        finally:
+            try:
+                _WINDOW_TIMER_TARGETS.remove(self)
+            except ValueError:
+                pass
 
 logging.basicConfig(
     filename=str(LOG_PATH),
@@ -383,8 +409,20 @@ I18N = {
     },
     "launch_login_update_failed": {"zh": "更新开机自动启动失败: {error}", "en": "Failed to update Launch At Login: {error}"},
     "already_running_hint": {
-        "zh": "FunASR Dictation 已在菜单栏运行。",
-        "en": "FunASR Dictation is already running in the menu bar.",
+        "zh": "FunASR Dictation 已经在运行。\n如果没有看到图标，请检查状态栏是否因项目过多而被隐藏。",
+        "en": "FunASR Dictation is already running.\nIf you can't see the icon, check whether it is hidden because your menu bar is full.",
+    },
+    "already_running_hidden_hint": {
+        "zh": "FunASR Dictation 已经在运行。\n如果没有看到图标，请检查状态栏是否因项目过多而被隐藏。",
+        "en": "FunASR Dictation is already running.\nIf you can't see the icon, check whether it is hidden because your menu bar is full.",
+    },
+    "startup_notice_title": {
+        "zh": "FunASR Dictation 已启动",
+        "en": "FunASR Dictation is running",
+    },
+    "startup_notice_body": {
+        "zh": "如果没看到图标，请检查状态栏是否因项目过多而被隐藏。",
+        "en": "If you can't see the icon, check whether it is hidden because your menu bar is full.",
     },
     "menu_open_uninstaller": {"zh": "打开卸载程序", "en": "Open Uninstaller"},
 }
@@ -573,6 +611,83 @@ def _run_modal_window(window: NSWindow) -> int:
             window.close()
         except Exception:
             pass
+
+
+def show_startup_notice(*, manual_close: bool) -> None:
+    global _STARTUP_NOTICE_WINDOW
+    app = NSApplication.sharedApplication()
+    screen = NSScreen.mainScreen()
+    if screen is None:
+        screens = NSScreen.screens()
+        if screens:
+            screen = screens[0]
+    if screen is None:
+        ui_alert_native(tr("startup_notice_body"), title=tr("startup_notice_title"))
+        return
+
+    if _STARTUP_NOTICE_WINDOW is not None:
+        try:
+            _STARTUP_NOTICE_WINDOW.orderOut_(None)
+            _STARTUP_NOTICE_WINDOW.close()
+        except Exception:
+            pass
+        _STARTUP_NOTICE_WINDOW = None
+
+    visible = screen.visibleFrame()
+    width = 360.0
+    height = 126.0
+    x = float(visible.origin.x + visible.size.width - width - 20.0)
+    y = float(visible.origin.y + visible.size.height - height - 24.0)
+
+    style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
+    window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+        NSMakeRect(x, y, width, height),
+        style,
+        NSBackingStoreBuffered,
+        False,
+    )
+    window.setReleasedWhenClosed_(False)
+    window.setTitle_(tr("app_name"))
+    window.setMovableByWindowBackground_(True)
+
+    content = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, height))
+    content.setWantsLayer_(True)
+    content_layer = content.layer()
+    if content_layer is not None:
+        content_layer.setBackgroundColor_(NSColor.windowBackgroundColor().CGColor())
+    window.setContentView_(content)
+
+    icon = _app_icon_image(rounded=True)
+    if icon is not None:
+        icon_view = NSImageView.alloc().initWithFrame_(NSMakeRect(16, 56, 40, 40))
+        icon_view.setImage_(icon)
+        content.addSubview_(icon_view)
+
+    title = _make_dialog_text(
+        NSMakeRect(68, 72, width - 84, 22),
+        tr("startup_notice_title"),
+        NSFont.boldSystemFontOfSize_(15),
+    )
+    content.addSubview_(title)
+
+    body = _make_dialog_text(
+        NSMakeRect(68, 28, width - 84, 38),
+        tr("startup_notice_body"),
+        NSFont.systemFontOfSize_(12),
+        color=NSColor.secondaryLabelColor(),
+        wrap=True,
+    )
+    content.addSubview_(body)
+
+    window.orderFrontRegardless()
+    _STARTUP_NOTICE_WINDOW = window
+    if manual_close:
+        app.activateIgnoringOtherApps_(True)
+        return
+
+    closer = _WindowTimerTarget.alloc().initWithWindow_(window)
+    _WINDOW_TIMER_TARGETS.append(closer)
+    closer.performSelector_withObject_afterDelay_("fire:", None, 5.0)
 
 
 def _make_dialog_text(
@@ -1014,6 +1129,72 @@ class UISettings:
     mouse_button: str = "x1"  # middle|x1|x2|button5..button24
     enable_dictation_on_app_start: bool = True
     app_language: str = "system"  # system|zh|en
+
+
+@dataclass
+class StartupState:
+    schema_version: int = 1
+    first_launch_notice_shown: bool = False
+    permission_recovery_pending: bool = False
+
+
+def load_startup_state() -> StartupState:
+    APP_SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
+    if not STARTUP_STATE_PATH.exists():
+        state = StartupState()
+        save_startup_state(state)
+        return state
+    try:
+        with open(STARTUP_STATE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        logging.warning("load_startup_state: invalid json, reset to defaults: %s", exc)
+        state = StartupState()
+        save_startup_state(state)
+        return state
+    return StartupState(
+        schema_version=int(data.get("schema_version", 1)),
+        first_launch_notice_shown=bool(data.get("first_launch_notice_shown", False)),
+        permission_recovery_pending=bool(data.get("permission_recovery_pending", False)),
+    )
+
+
+def save_startup_state(state: StartupState) -> None:
+    APP_SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_path = STARTUP_STATE_PATH.with_suffix(".json.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(asdict(state), f, indent=2, ensure_ascii=False)
+    os.replace(tmp_path, STARTUP_STATE_PATH)
+
+
+def consume_startup_context() -> dict:
+    APP_SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
+    if not STARTUP_CONTEXT_PATH.exists():
+        return {"source": "unknown"}
+    try:
+        with open(STARTUP_CONTEXT_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        logging.warning("consume_startup_context: invalid json: %s", exc)
+        data = {"source": "unknown"}
+    try:
+        STARTUP_CONTEXT_PATH.unlink()
+    except Exception:
+        pass
+    return {"source": str(data.get("source", "unknown")).strip().lower() or "unknown"}
+
+
+def startup_notice_mode(startup_state: StartupState, startup_context: dict) -> Optional[str]:
+    source = str(startup_context.get("source", "unknown")).strip().lower()
+    if source == "autostart":
+        return None
+    if startup_state.permission_recovery_pending:
+        return "manual_close"
+    if not startup_state.first_launch_notice_shown:
+        return "manual_close"
+    if source == "manual":
+        return "auto_close"
+    return None
 
 
 def load_core_config() -> CoreConfig:
@@ -2989,6 +3170,7 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.pending_alerts_lock = threading.Lock()
         self.pending_reenable = False
         self.pending_startup_enable = False
+        self.pending_startup_notice_mode: Optional[str] = None
         self.permission_hint_shown = False
         self.permission_error_alert_shown = False
         self.regular_mode_for_error = False
@@ -2996,6 +3178,18 @@ class SenseVoiceMenuBarApp(rumps.App):
         self._status_item_ready_logged = False
         self._status_item_enforce_warned = False
         self._menu_icon_ns: Optional[NSImage] = None
+        self.startup_state = load_startup_state()
+        self.startup_context = consume_startup_context()
+        self.pending_startup_notice_mode = startup_notice_mode(
+            self.startup_state,
+            self.startup_context,
+        )
+        if self.pending_startup_notice_mode == "manual_close":
+            if self.startup_state.permission_recovery_pending:
+                self.startup_state.permission_recovery_pending = False
+            if not self.startup_state.first_launch_notice_shown:
+                self.startup_state.first_launch_notice_shown = True
+            save_startup_state(self.startup_state)
 
         self.engine = DictationEngine(
             self.core_config,
@@ -3193,6 +3387,13 @@ class SenseVoiceMenuBarApp(rumps.App):
         if self.pending_startup_enable:
             self.pending_startup_enable = False
             self.enable_dictation(show_alert=True, request_prompt=True)
+        if self.pending_startup_notice_mode is not None:
+            mode = self.pending_startup_notice_mode
+            self.pending_startup_notice_mode = None
+            show_startup_notice(manual_close=(mode == "manual_close"))
+            if mode == "auto_close":
+                self.startup_state.first_launch_notice_shown = True
+                save_startup_state(self.startup_state)
 
     def on_trigger(self) -> None:
         if not self.dictation_enabled or self.updating_model:
@@ -3220,6 +3421,9 @@ class SenseVoiceMenuBarApp(rumps.App):
             self.dictation_enabled = False
             self.on_engine_status("ERROR")
             self._set_error_visibility_mode()
+            if "Failed to create keyboard event tap" in str(exc):
+                self.startup_state.permission_recovery_pending = True
+                save_startup_state(self.startup_state)
             if (
                 show_alert
                 and "Failed to create keyboard event tap" in str(exc)
@@ -3549,7 +3753,7 @@ def main() -> None:
     if not acquire_single_instance():
         logging.info("another instance exists, skip launch")
         try:
-            ui_alert(tr("already_running_hint"), title=tr("app_name"))
+            ui_alert(tr("already_running_hidden_hint"), title=tr("app_name"))
         except Exception:
             pass
         return

@@ -10,6 +10,7 @@ DOMAIN="gui/$(id -u)"
 AUTOSTART_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
 AUTOSTART_RUNNER="$AUTOSTART_DIR/autostart_runner.sh"
 AUTOSTART_LOG_DIR="$HOME/Library/Logs/SenseVoiceDictation"
+STARTUP_CONTEXT_PATH="$AUTOSTART_DIR/startup_context.json"
 
 mkdir -p "$HOME/Library/LaunchAgents"
 mkdir -p "$AUTOSTART_DIR"
@@ -19,13 +20,14 @@ cat > "$AUTOSTART_RUNNER" <<'RUNNER'
 #!/usr/bin/env bash
 set -uo pipefail
 
-# RUNNER_VERSION=3
+# RUNNER_VERSION=4
 APP_DIR="__APP_DIR__"
 START_SCRIPT="$APP_DIR/start_app.sh"
 LAUNCHER_APP="$HOME/Applications/FunASR Dictation.app"
 LEGACY_LAUNCHER_APP="$HOME/Applications/SenseVoice Dictation.app"
 RUNTIME_LOG="$HOME/Library/Logs/SenseVoiceDictation/menubar_runtime.log"
 WAIT_LOG="$HOME/Library/Logs/SenseVoiceDictation/autostart_wait.log"
+STARTUP_CONTEXT_PATH="$HOME/Library/Application Support/SenseVoiceDictation/startup_context.json"
 
 wait_round=0
 while [[ ! -d "$APP_DIR" || ( ! -x "$START_SCRIPT" && ! -d "$LAUNCHER_APP" && ! -d "$LEGACY_LAUNCHER_APP" ) ]]; do
@@ -47,6 +49,10 @@ fi
 if [[ -d "$LAUNCHER_APP" ]]; then
   # Launch in background without forcing hidden state, otherwise menu bar icon
   # may not appear reliably after login.
+  mkdir -p "$(dirname "$STARTUP_CONTEXT_PATH")"
+  cat >"$STARTUP_CONTEXT_PATH" <<'JSON'
+{"source":"autostart"}
+JSON
   if /usr/bin/open -g "$LAUNCHER_APP" >>"$RUNTIME_LOG" 2>&1; then
     exit 0
   fi
