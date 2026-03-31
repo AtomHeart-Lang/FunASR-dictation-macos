@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 repo = Path(os.environ['REPO_DIR'])
 create_uninstaller = (repo / 'create_uninstaller.sh').read_text(encoding='utf-8')
-assert 'APP_VERSION="1.0.8"' in create_uninstaller
-assert 'APP_VERSION="1.0.8"' in (repo / 'build_dmg.sh').read_text(encoding='utf-8')
-assert 'APP_VERSION="1.0.8"' in (repo / 'create_launcher.sh').read_text(encoding='utf-8')
+assert 'APP_VERSION="1.0.9"' in create_uninstaller
+assert 'APP_VERSION="1.0.9"' in (repo / 'build_dmg.sh').read_text(encoding='utf-8')
+assert 'APP_VERSION="1.0.9"' in (repo / 'create_launcher.sh').read_text(encoding='utf-8')
 assert 'assets/uninstaller_launcher_icon_finnal.png' in create_uninstaller
 assert (repo / 'assets' / 'uninstaller_launcher_icon_finnal.png').exists(), 'Dedicated uninstaller icon asset is missing'
 
@@ -25,5 +25,7 @@ assert '## 开发者说明' in readme_zh
 assert '### 菜单中英文名称对照' not in readme_zh
 assert '## Developer' in readme and readme.index('## Developer') > readme.index('## Getting Started')
 assert '## 开发者说明' in readme_zh and readme_zh.index('## 开发者说明') > readme_zh.index('## 快速开始')
+assert 'SenseVoiceDictation/ui_settings.json' not in readme
+assert 'SenseVoiceDictation/ui_settings.json' not in readme_zh
 print('[PASS] release polish')
 PY

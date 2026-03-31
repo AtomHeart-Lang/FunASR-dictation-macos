@@ -76,7 +76,8 @@ except ModuleNotFoundError as exc:
 
 
 APP_DIR = Path(__file__).resolve().parent
-APP_SUPPORT_DIR = Path.home() / "Library/Application Support/SenseVoiceDictation"
+APP_SUPPORT_DIR = Path.home() / "Library/Application Support/FunASRDictation"
+LEGACY_APP_SUPPORT_DIR = Path.home() / "Library/Application Support/SenseVoiceDictation"
 CONFIG_PATH = APP_DIR / "config.toml"
 LEGACY_UI_SETTINGS_PATH = APP_DIR / "ui_settings.json"
 UI_SETTINGS_PATH = APP_SUPPORT_DIR / "ui_settings.json"
@@ -90,7 +91,7 @@ FUNASR_RUNTIME_DIR = APP_DIR / "funasr_nano_runtime"
 FUNASR_REMOTE_CODE_PATH = FUNASR_RUNTIME_DIR / "model.py"
 MENU_ICON = str((APP_DIR / "assets" / "mic_menu_icon.png").resolve())
 APP_ICON = str((APP_DIR / "assets" / "app_launcher_icon.png").resolve())
-APP_BUILD = "2026-03-30-v1.0.8"
+APP_BUILD = "2026-03-31-v1.0.9"
 LOCK_FD = None
 EVENT_TAP_LOCATION = Quartz.kCGSessionEventTap
 DEFAULT_NCPU = max(1, int(os.environ.get("SVD_NCPU", "2")))
@@ -117,9 +118,10 @@ EMOJI_RE = re.compile(
 )
 AUTOSTART_PLIST = Path.home() / "Library/LaunchAgents/com.lee.funasr.menubar.plist"
 LEGACY_AUTOSTART_PLIST = Path.home() / "Library/LaunchAgents/com.lee.sensevoice.menubar.plist"
-AUTOSTART_RUNNER = (
-    Path.home() / "Library/Application Support/SenseVoiceDictation/autostart_runner.sh"
-)
+AUTOSTART_RUNNER = APP_SUPPORT_DIR / "autostart_runner.sh"
+LEGACY_AUTOSTART_RUNNER = LEGACY_APP_SUPPORT_DIR / "autostart_runner.sh"
+RUNTIME_PATH_FILE = APP_SUPPORT_DIR / "runtime_app_dir.txt"
+LEGACY_RUNTIME_PATH_FILE = LEGACY_APP_SUPPORT_DIR / "runtime_app_dir.txt"
 AUTOSTART_RUNNER_VERSION = "4"
 ENABLE_AUTOSTART_SCRIPT = APP_DIR / "enable_autostart.sh"
 DISABLE_AUTOSTART_SCRIPT = APP_DIR / "disable_autostart.sh"
@@ -1159,8 +1161,29 @@ class StartupState:
     permission_recovery_pending: bool = False
 
 
-def load_startup_state() -> StartupState:
+def _migrate_legacy_support_file(legacy_path: Path, target_path: Path) -> None:
+    if target_path.exists() or not legacy_path.exists():
+        return
+    try:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(legacy_path, target_path)
+        logging.info("migrated legacy support file: %s -> %s", legacy_path, target_path)
+    except Exception as exc:
+        logging.warning("failed to migrate legacy support file %s: %s", legacy_path, exc)
+
+
+def ensure_support_dir_layout() -> None:
     APP_SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
+    _migrate_legacy_support_file(LEGACY_APP_SUPPORT_DIR / "ui_settings.json", UI_SETTINGS_PATH)
+    _migrate_legacy_support_file(LEGACY_APP_SUPPORT_DIR / "startup_state.json", STARTUP_STATE_PATH)
+    _migrate_legacy_support_file(LEGACY_APP_SUPPORT_DIR / "startup_context.json", STARTUP_CONTEXT_PATH)
+    _migrate_legacy_support_file(LEGACY_RUNTIME_PATH_FILE, RUNTIME_PATH_FILE)
+    identity_target = APP_SUPPORT_DIR / "launcher_identity.sha256"
+    _migrate_legacy_support_file(LEGACY_APP_SUPPORT_DIR / "launcher_identity.sha256", identity_target)
+
+
+def load_startup_state() -> StartupState:
+    ensure_support_dir_layout()
     if not STARTUP_STATE_PATH.exists():
         state = StartupState()
         save_startup_state(state)
@@ -1181,7 +1204,7 @@ def load_startup_state() -> StartupState:
 
 
 def save_startup_state(state: StartupState) -> None:
-    APP_SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_support_dir_layout()
     tmp_path = STARTUP_STATE_PATH.with_suffix(".json.tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(asdict(state), f, indent=2, ensure_ascii=False)
@@ -1189,7 +1212,7 @@ def save_startup_state(state: StartupState) -> None:
 
 
 def consume_startup_context() -> dict:
-    APP_SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_support_dir_layout()
     if not STARTUP_CONTEXT_PATH.exists():
         return {"source": "unknown"}
     try:
@@ -1597,7 +1620,7 @@ def ui_edit_model_config(current: CoreConfig) -> Optional[CoreConfig]:
 
 
 def load_ui_settings() -> UISettings:
-    APP_SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_support_dir_layout()
     if not UI_SETTINGS_PATH.exists() and LEGACY_UI_SETTINGS_PATH.exists():
         try:
             shutil.copy2(LEGACY_UI_SETTINGS_PATH, UI_SETTINGS_PATH)
@@ -1661,7 +1684,7 @@ def load_ui_settings() -> UISettings:
 
 
 def save_ui_settings(settings: UISettings) -> None:
-    APP_SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_support_dir_layout()
     payload = asdict(settings)
     tmp_path = UI_SETTINGS_PATH.with_suffix(".json.tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
@@ -1884,6 +1907,26 @@ def _effective_autostart_plist() -> Path:
     return AUTOSTART_PLIST
 
 
+def _read_path_file(path: Path) -> Optional[Path]:
+    try:
+        raw = path.read_text(encoding="utf-8", errors="ignore").strip()
+    except Exception:
+        return None
+    if not raw:
+        return None
+    return Path(raw).expanduser()
+
+
+def read_runtime_app_dir() -> Optional[Path]:
+    for candidate in (RUNTIME_PATH_FILE, LEGACY_RUNTIME_PATH_FILE):
+        if not candidate.exists():
+            continue
+        runtime_path = _read_path_file(candidate)
+        if runtime_path is not None:
+            return runtime_path
+    return None
+
+
 def _uninstaller_app_path() -> Path:
     return Path.home() / "Applications" / "Uninstall FunASR Dictation.app"
 
@@ -1907,11 +1950,11 @@ def is_os_autostart_legacy() -> bool:
 
 def is_os_autostart_runner_outdated() -> bool:
     if not AUTOSTART_RUNNER.exists():
-        return False
+        return True
     try:
         content = AUTOSTART_RUNNER.read_text(encoding="utf-8", errors="ignore")
     except Exception:
-        return False
+        return True
     version_marker = f"RUNNER_VERSION={AUTOSTART_RUNNER_VERSION}"
     if version_marker not in content:
         return True
@@ -1926,6 +1969,31 @@ def is_os_autostart_runner_outdated() -> bool:
     if 'exec /bin/bash "$START_SCRIPT"' in content and "fallback to launcher app" not in content:
         return True
     return False
+
+
+def is_os_autostart_healthy() -> bool:
+    if not is_os_autostart_enabled():
+        return False
+    if is_os_autostart_legacy():
+        return False
+    if is_os_autostart_runner_outdated():
+        return False
+    if not RUNTIME_PATH_FILE.exists():
+        return False
+    runtime_path = read_runtime_app_dir()
+    if runtime_path is None or not runtime_path.exists():
+        return False
+    if not (runtime_path / "start_app.sh").exists():
+        return False
+    if not AUTOSTART_RUNNER.exists():
+        return False
+    return True
+
+
+def is_os_autostart_damaged() -> bool:
+    if not is_os_autostart_enabled():
+        return False
+    return not is_os_autostart_healthy()
 
 
 def set_os_autostart_enabled(enable: bool) -> None:
@@ -3488,12 +3556,10 @@ class SenseVoiceMenuBarApp(rumps.App):
         self.build_item.title = f'{tr("build_prefix")}: {APP_BUILD}'
 
         self.auto_on_item.state = 1 if self.ui_settings.enable_dictation_on_app_start else 0
-        self.launch_login_item.state = 1 if is_os_autostart_enabled() else 0
+        self.launch_login_item.state = 1 if is_os_autostart_healthy() else 0
 
     def _migrate_autostart_if_needed(self) -> None:
-        if not is_os_autostart_enabled():
-            return
-        if not is_os_autostart_legacy() and not is_os_autostart_runner_outdated():
+        if not is_os_autostart_damaged():
             return
         try:
             set_os_autostart_enabled(True)
@@ -3730,7 +3796,9 @@ class SenseVoiceMenuBarApp(rumps.App):
     @rumps.clicked("Enable Launch At Login")
     def on_toggle_launch_at_login(self, sender):
         try:
-            target = not is_os_autostart_enabled()
+            configured = is_os_autostart_enabled()
+            healthy = is_os_autostart_healthy()
+            target = True if configured and not healthy else not configured
             set_os_autostart_enabled(target)
             self.refresh_ui_labels()
         except Exception as exc:

@@ -7,14 +7,21 @@ LABEL="com.lee.funasr.menubar"
 LEGACY_PLIST="$HOME/Library/LaunchAgents/com.lee.sensevoice.menubar.plist"
 LEGACY_LABEL="com.lee.sensevoice.menubar"
 DOMAIN="gui/$(id -u)"
-AUTOSTART_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
+AUTOSTART_DIR="$HOME/Library/Application Support/FunASRDictation"
 AUTOSTART_RUNNER="$AUTOSTART_DIR/autostart_runner.sh"
-AUTOSTART_LOG_DIR="$HOME/Library/Logs/SenseVoiceDictation"
+AUTOSTART_LOG_DIR="$HOME/Library/Logs/FunASRDictation"
 STARTUP_CONTEXT_PATH="$AUTOSTART_DIR/startup_context.json"
+LEGACY_AUTOSTART_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
+LEGACY_AUTOSTART_RUNNER="$LEGACY_AUTOSTART_DIR/autostart_runner.sh"
+LEGACY_AUTOSTART_LOG_DIR="$HOME/Library/Logs/SenseVoiceDictation"
 
 mkdir -p "$HOME/Library/LaunchAgents"
 mkdir -p "$AUTOSTART_DIR"
 mkdir -p "$AUTOSTART_LOG_DIR"
+rm -f "$LEGACY_AUTOSTART_RUNNER"
+rmdir "$LEGACY_AUTOSTART_DIR" >/dev/null 2>&1 || true
+rm -f "$LEGACY_AUTOSTART_LOG_DIR"/launchagent.out.log "$LEGACY_AUTOSTART_LOG_DIR"/launchagent.err.log "$LEGACY_AUTOSTART_LOG_DIR"/autostart_wait.log "$LEGACY_AUTOSTART_LOG_DIR"/menubar_runtime.log
+rmdir "$LEGACY_AUTOSTART_LOG_DIR" >/dev/null 2>&1 || true
 
 cat > "$AUTOSTART_RUNNER" <<'RUNNER'
 #!/usr/bin/env bash
@@ -25,9 +32,9 @@ APP_DIR="__APP_DIR__"
 START_SCRIPT="$APP_DIR/start_app.sh"
 LAUNCHER_APP="$HOME/Applications/FunASR Dictation.app"
 LEGACY_LAUNCHER_APP="$HOME/Applications/SenseVoice Dictation.app"
-RUNTIME_LOG="$HOME/Library/Logs/SenseVoiceDictation/menubar_runtime.log"
-WAIT_LOG="$HOME/Library/Logs/SenseVoiceDictation/autostart_wait.log"
-STARTUP_CONTEXT_PATH="$HOME/Library/Application Support/SenseVoiceDictation/startup_context.json"
+RUNTIME_LOG="$HOME/Library/Logs/FunASRDictation/menubar_runtime.log"
+WAIT_LOG="$HOME/Library/Logs/FunASRDictation/autostart_wait.log"
+STARTUP_CONTEXT_PATH="$HOME/Library/Application Support/FunASRDictation/startup_context.json"
 
 wait_round=0
 while [[ ! -d "$APP_DIR" || ( ! -x "$START_SCRIPT" && ! -d "$LAUNCHER_APP" && ! -d "$LEGACY_LAUNCHER_APP" ) ]]; do

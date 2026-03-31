@@ -4,7 +4,7 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="$APP_DIR/menubar_runtime.log"
 LOCK_FILE="$APP_DIR/menubar_app.lock"
-APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
+APP_SUPPORT_DIR="$HOME/Library/Application Support/FunASRDictation"
 STARTUP_CONTEXT_PATH="$APP_SUPPORT_DIR/startup_context.json"
 
 localized_running_message() {

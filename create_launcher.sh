@@ -4,7 +4,7 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="FunASR Dictation"
 LEGACY_APP_NAME="SenseVoice Dictation"
-APP_VERSION="1.0.8"
+APP_VERSION="1.0.9"
 APP_BUNDLE="$HOME/Applications/$APP_NAME.app"
 DESKTOP_APP="$HOME/Desktop/$APP_NAME.app"
 LEGACY_APP_BUNDLE="$HOME/Applications/$LEGACY_APP_NAME.app"
@@ -16,9 +16,11 @@ APP_BUNDLE_ID="com.lee.sensevoice.dictation.launcher"
 LEGACY_BUNDLE_IDS=(
   "com.lee.funasr.dictation.launcher"
 )
-APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
+APP_SUPPORT_DIR="$HOME/Library/Application Support/FunASRDictation"
+LEGACY_APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
 LAUNCHER_IDENTITY_FILE="$APP_SUPPORT_DIR/launcher_identity.sha256"
 RUNTIME_PATH_FILE="$APP_SUPPORT_DIR/runtime_app_dir.txt"
+LEGACY_RUNTIME_PATH_FILE="$LEGACY_APP_SUPPORT_DIR/runtime_app_dir.txt"
 FORCE_REBUILD=0
 CREATE_DESKTOP_SHORTCUT=0
 LAUNCHER_BIN="$APP_BUNDLE/Contents/MacOS/FunASRLauncher"
@@ -75,6 +77,7 @@ launcher_supports_runtime_path() {
 write_runtime_path_file() {
   mkdir -p "$APP_SUPPORT_DIR"
   printf '%s\n' "$APP_DIR" > "$RUNTIME_PATH_FILE"
+  rm -f "$LEGACY_RUNTIME_PATH_FILE"
 }
 
 TMP_DIR="$(mktemp -d /tmp/funasr-launcher.XXXXXX)"
@@ -197,6 +200,7 @@ current_hash="$(launcher_hash "$LAUNCHER_BIN" || true)"
 if [[ -n "$current_hash" ]]; then
   echo "$current_hash" > "$LAUNCHER_IDENTITY_FILE"
 fi
+rm -f "$LEGACY_APP_SUPPORT_DIR/launcher_identity.sha256"
 reset_tcc_for_bundle "$APP_BUNDLE_ID"
 reset_tcc_for_legacy_bundle_ids
 

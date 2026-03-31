@@ -2,10 +2,12 @@
 set -euo pipefail
 
 APP_NAME="Uninstall FunASR Dictation"
-APP_VERSION="1.0.8"
+APP_VERSION="1.0.9"
 APP_BUNDLE="$HOME/Applications/$APP_NAME.app"
-APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
+APP_SUPPORT_DIR="$HOME/Library/Application Support/FunASRDictation"
 RUNTIME_PATH_FILE="$APP_SUPPORT_DIR/runtime_app_dir.txt"
+LEGACY_APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
+LEGACY_RUNTIME_PATH_FILE="$LEGACY_APP_SUPPORT_DIR/runtime_app_dir.txt"
 ICON_SRC="$(cd "$(dirname "$0")" && pwd)/assets/uninstaller_launcher_icon_finnal.png"
 RUNNER_SRC="$(cd "$(dirname "$0")" && pwd)/task_runner/TaskProgressApp.m"
 RUNNER_TEMPLATE_BIN="$(cd "$(dirname "$0")" && pwd)/task_runner/TaskProgressApp"
@@ -70,12 +72,18 @@ cat > "$APP_BUNDLE/Contents/Resources/run_task.sh" <<'SCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
+APP_SUPPORT_DIR="$HOME/Library/Application Support/FunASRDictation"
 RUNTIME_PATH_FILE="$APP_SUPPORT_DIR/runtime_app_dir.txt"
+LEGACY_APP_SUPPORT_DIR="$HOME/Library/Application Support/SenseVoiceDictation"
+LEGACY_RUNTIME_PATH_FILE="$LEGACY_APP_SUPPORT_DIR/runtime_app_dir.txt"
 STANDARD_RUNTIME_DIR="$HOME/Library/Application Support/FunASRDictation/app"
 
 runtime_dir="$(cat "$RUNTIME_PATH_FILE" 2>/dev/null || true)"
 runtime_dir="${runtime_dir%$'\r'}"
+if [[ -z "$runtime_dir" ]]; then
+  runtime_dir="$(cat "$LEGACY_RUNTIME_PATH_FILE" 2>/dev/null || true)"
+  runtime_dir="${runtime_dir%$'\r'}"
+fi
 
 if [[ -z "$runtime_dir" || ! -d "$runtime_dir" || ! -x "$runtime_dir/uninstall.sh" ]]; then
   echo "[ERROR] Installed runtime was not found. Please remove the app manually if it is already gone."
